@@ -1,0 +1,321 @@
+.woocommerce-account .communication-item {
+  margin-bottom: 20px;
+}
+.woocommerce-address-fields .select2-container--default .select2-selection--single {
+    border: 1px solid #eee;
+    border-radius: 0;
+    height: 36px;
+    background: #f7f7f7;
+  }
+
+  #gender_field .select2-container {
+    width: 100% !important;
+  }
+
+  .woocommerce-MyAccount-content #shipping_address_1_field, .woocommerce-MyAccount-content .woocommerce-address-fields > p#birthDate_field {
+    clear: none;
+  }
+
+  .woocommerce .woocommerce-MyAccount-content form .woocommerce-address-fields .form-row  .input-checkbox, 
+  .woocommerce .woocommerce-MyAccount-content form#woocommerce-edit-communication .form-row .input-checkbox {
+   /*  position: relative; */
+    display: inline-block;
+  }
+
+.optional {
+    display: none;
+}
+  
+  .woocommerce-account .woocommerce .woocommerce-error {
+    color: red;
+  }
+
+  .confirm-modal-template.modal {
+    width: auto;
+    text-align: center;
+  }
+
+  .o-multi-field-code__container input[type="number"]::-webkit-outer-spin-button,
+  .o-multi-field-code__container input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+  }
+  
+  .o-multi-field-code__container input[type='number'],
+  .o-multi-field-code__container input[type="number"]:hover,
+  .o-multi-field-code__container input[type="number"]:focus {
+      appearance: none;
+      -moz-appearance: textfield;
+  }
+
+  .o-multi-field-code__inputs-wrapper[data-v-450698ef] {
+    display: inline-flex;
+  }
+
+  .o-multi-field-code__container input[data-v-450698ef] {
+    width: 40px;
+    height: 60px;
+    border: solid 1px #d9d9d9;
+    font-size: 36px;
+    text-align: center;
+    line-height: 20px;
+  }
+
+  .o-sms-auth-modal-sms-sent-notifier__container[data-v-7e394bb2] {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+  }
+
+  #send-again {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  #enter-confirm-code .blockUI.blockOverlay::before {
+    height: 1em;
+    width: 1em;
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin-left: -.5em;
+    margin-top: -.5em;
+    content: '';
+    -webkit-animation: spin 1s ease-in-out infinite;
+    animation: spin 1s ease-in-out infinite;
+    background: url(images/loader.svg) center center;
+    background-size: cover;
+    line-height: 1;
+    text-align: center;
+    font-size: 2em;
+    color: rgba(0,0,0,.75);
+}
+
+#bonuses-actions #billing_add_bonuses_field {
+  margin-top: 20px;
+}
+
+#bonuses-available, #bonuses-added {
+  margin-bottom: 20px;
+  color: #00589C;
+  font-weight: 500;
+  font-size: 14px;
+  /* font-family: "Golos"; */
+}
+
+  @media (min-width: 768px) {
+    .o-multi-field-code__input-wrapper[data-v-450698ef] {
+      width: 60px;
+      height: 75px;
+      margin: 0 15px 0 0;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .o-multi-field-code__container input[data-v-450698ef] {
+      width: 60px;
+      height: 75px;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .o-sms-auth-modal-sms-sent-notifier__container[data-v-7e394bb2] {
+      margin: 10px 0;
+    }
+  }
+
+  :root {
+    --white: #fff;
+    --gray: #9EA5A9;
+    --black: #323232;
+    --green: #74C543;
+  }
+  
+  .bonuses__not {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--gray);
+  }
+  
+  .bonuses__info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 2rem;
+    row-gap: 0.75rem;
+    color: var(--white);
+    background-color: var(--green);
+    border-radius: 0.75rem;
+    padding: 1.88rem;
+    margin-bottom: 60px;
+    line-height: 1;
+  }
+  
+  .bonuses__txt {
+    font-weight: 600;
+    font-size: 1.5rem;
+    color: var(--white);
+  }
+  
+  .bonuses__total {
+    font-weight: 700;
+    font-size: 2.62rem;
+    color: var(--white);
+  }
+  
+  .bonuses__subtitle {
+    font-weight: 600;
+    font-size: 1.5rem;
+    color: var(--black);
+    line-height: 1;
+    margin-bottom: 30px;
+  }
+  
+  table {
+    border-collapse: collapse;
+  }
+  
+  th {
+    text-align: inherit;
+    text-align: -webkit-match-parent;
+  }
+  
+  thead,
+  tbody,
+  tfoot,
+  tr,
+  td,
+  th {
+    border-color: inherit;
+    border-style: solid;
+    border-width: 0;
+  }
+  
+  .table {
+    width: 100%;
+    vertical-align: top;
+    border-color: #EBEBEB;
+  }
+  
+  .table:not(:last-of-type) {
+    margin-bottom: 1rem;
+  }
+  
+  .table td {
+    width: 20%;
+  }
+  
+  .table> :not(caption)>*>* {
+    padding: 1.25rem 1.625rem;
+    background-color: var(--white);
+    border-bottom-width: 1px;
+  }
+  
+  .table tbody tr td:first-child {
+    padding-left: 0;
+  }
+  
+  .table tr:first-child td {
+    padding-top: 0;
+  }
+  
+  .table>tbody {
+    vertical-align: inherit;
+  }
+  
+  .table>thead {
+    vertical-align: bottom;
+  }
+  
+  .td__label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--gray);
+    margin-bottom: .75rem;
+    white-space: nowrap;
+  }
+  
+  .td__value {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--black);
+    white-space: nowrap;
+  }
+  
+  @media screen and (max-width: 1220px) {
+  
+    .bonuses__info {
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      margin-bottom: 40px;
+    }
+  
+    .bonuses__txt {
+      font-size: 1.125rem;
+    }
+  
+    .bonuses__total {
+      font-size: 2rem;
+    }
+  
+    .td__value {
+      font-size: 1rem;
+    }
+  
+    .table> :not(caption)>*>* {
+      padding-left: .5rem;
+      padding-right: .5rem;
+    }
+  
+  }
+  
+  @media (max-width: 1019.98px) {
+    .bonuses__subtitle {
+      line-height: 1.4;
+    }
+  }
+  
+  @media screen and (max-width: 599.98px) {
+  
+    .bonuses__subtitle {
+      margin-bottom: 1.25rem;
+    }
+  
+    .bonuses__not {
+      font-size: 1rem;
+    }
+  
+    .table tbody {
+      display: grid;
+      row-gap: 1.25rem;
+    }
+  
+    .table tr {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      column-gap: 1.1875rem;
+      row-gap: 1.25rem;
+      line-height: 1;
+    }
+  
+    .table tr:not(:last-child) {
+      border-bottom: 1px solid #ebebeb;
+      padding-bottom: 1.25rem;
+    }
+  
+    .table td {
+      display: block;
+      padding: 0;
+    }
+  
+    .table> :not(caption)>*>* {
+      border: 0;
+    }
+  }
+  
+  @media screen and (max-width: 359.98px) {
+    .bonuses__info {
+      display: grid;
+    }
+  }
