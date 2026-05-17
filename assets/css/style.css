@@ -319,3 +319,38 @@
       display: grid;
     }
   }
+
+/* Ожидание ответа RightWay (BlockUI на ЛК: billing, communication-options) */
+.rightway-rw-await {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 300px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #333;
+}
+.rightway-rw-await__text {
+  margin: 0;
+}
+.rightway-rw-await__spinner {
+  display: block;
+  width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #7f54b3;
+  border-radius: 50%;
+  animation: rightway-rw-await-spin 0.7s linear infinite;
+}
+@keyframes rightway-rw-await-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cabinet_section.rightway-rw-waiting,
+.woocommerce-MyAccount-content.rightway-rw-waiting {
+  position: relative;
+}

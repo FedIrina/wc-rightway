@@ -3,7 +3,7 @@
 * Plugin Name: RightWay
 * Plugin URI: https://ivannikitin-com.github.io/rightway/
 * Description: Плагин для связи WooCommerce с платформой лояльности RightWay.
-* Version: 1.0.0
+* Version: 1.1.0
 * Author: Иван Никитин и партнеры
 * Author URI: https://ivannikitin.com
 * License:     GPL3
@@ -33,25 +33,27 @@ defined( 'ABSPATH' ) or die( 'No script please!' );
 /* Глобальные константы плагина */
 define( 'RIGTWAY', 'rightway' );	// Text Domain
 
-add_action( 'init', 'rightway_test_user' );
+require_once __DIR__ . '/classes/Plugin.php';
+require_once __DIR__ . '/classes/API.php';
 
-function rightway_test_user() {
+add_action( 'plugins_loaded', 'rightway_load_plugin', 20 );
 
-        $current_user = wp_get_current_user();
-/*         if ($current_user->exists() && !in_array($current_user->user_login, array('irinaf','skywalker27','skywalker2718')) ) {
-                return;
-        } */
-        /* Файлы ядра плагина */
-        require_once( 'classes/Plugin.php' );
-        require_once( 'classes/API.php' );
+/**
+ * Подключает singleton плагина после загрузки WooCommerce.
+ *
+ * @return void
+ */
+function rightway_load_plugin() {
+	if ( ! class_exists( 'WooCommerce' ) ) {
+		return;
+	}
 
-        /* Запуск плагина */
-        \RIGHTWAY\Plugin::init( 
-            plugin_dir_path( __FILE__ ), 			// Путь к папке плагина
-            plugin_dir_url( __FILE__ ), 			// URL папки плагина
-            get_file_data( __FILE__, array(			// Мета-данные из заголовка плагина
-                    'Name' 		=> 'Plugin Name',	// Название Плагина
-                    'Version' 	=> 'Version',		// Версия плагина
-                ) ) );
+	\RIGHTWAY\Plugin::init(
+		plugin_dir_path( __FILE__ ),
+		plugin_dir_url( __FILE__ ),
+		get_file_data( __FILE__, array(
+			'Name'    => 'Plugin Name',
+			'Version' => 'Version',
+		) )
+	);
 }
-

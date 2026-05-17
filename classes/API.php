@@ -1,6 +1,10 @@
 <?php
 /**
- * Взаимодействие интернет-магазина с платформой лояльности RightWay
+ * HTTP-клиент к REST API RightWay и к XML processing (бонусы, чеки).
+ *
+ * Используется из {@see \RIGHTWAY\Plugin} как {@see \RIGHTWAY\Plugin::$rightWayAPI}.
+ *
+ * @package RIGHTWAY
  */
 namespace RIGHTWAY;
 
@@ -8,12 +12,15 @@ class RightWay {
 
     const LOGFILE = 'rightway.log';
 
+    /** @var int|string Идентификатор бренда в RW. */
     public $brandId;
+    /** @var string Название магазина для запросов. */
     public $shopName;
+    /** @var mixed Кэш бонусов (если используется). */
     private $customerRWBonuses;
 
     /**
-     * Параметры удаленного сервера и подключения
+     * Ключи API, базовые URL эндпоинтов RightWay.
      */
     private $wc_rightway_api_key;
     private $wc_rightway_api_version;
@@ -26,9 +33,23 @@ class RightWay {
     private $rwApiUrlAuth;
     private $rwApiUrlRegister;
     private $rwApiUrlCard;
+    /** @var string URL POST card/merge. */
+    private $rwApiUrlCardMerge;
     private $rwApiUrlContacts;
     private $rwProcessingUrl;
 
+    /**
+     * Сохраняет учётные данные API и инициализирует URL сервисов RW.
+     *
+     * @param string|int $wc_rightway_brand_id Идентификатор бренда.
+     * @param string     $wc_rightway_shop_name Название магазина.
+     * @param string     $wc_rightway_api_key Ключ X-API-Key.
+     * @param string     $wc_rightway_api_version Версия X-API-Version.
+     * @param string     $wc_rightway_tssa_key Ключ для запросов от имени клиента (TSSA).
+     * @param string     $wc_rightway_x_processing_version Версия processing API.
+     * @param string     $wc_rightway_x_processing_key Ключ processing API.
+     * @return void
+     */
     public function __construct($wc_rightway_brand_id, $wc_rightway_shop_name, $wc_rightway_api_key, $wc_rightway_api_version, $wc_rightway_tssa_key, $wc_rightway_x_processing_version, $wc_rightway_x_processing_key) {
         $this->wc_rightway_api_key = $wc_rightway_api_key;
         $this->wc_rightway_api_version = $wc_rightway_api_version;
@@ -37,8 +58,6 @@ class RightWay {
         $this->wc_rightway_x_processing_version = $wc_rightway_x_processing_version;
         $this->brandId = $wc_rightway_brand_id;
         $this->shopName = $wc_rightway_shop_name;
-        $this->brandId = 165;
-        $this->shopName = "Медкнигасервис";
         $this->rwApiUrlCustomers = 'https://rightway-api.omnichannel.ru/externalApi/customers';
         $this->rwApiUrlCustomersSearch = 'https://rightway-api.omnichannel.ru/externalApi/customers/search';
         $this->rwApiUrlCardSearch = 'https://rightway-api.omnichannel.ru/externalApi/card/search';
@@ -51,15 +70,29 @@ class RightWay {
     }
 
     /**
-     * Получает идентификатор клиента в платформе RightWay
-     * @param string $user_login Username.
-     * @param WP_User WP_User object of the logged-in user.
-     * @return int $customerId
+     * Email для поиска клиента/карты в RW — billing_email (как на checkout).
+     *
+     * @param \WP_User $user
+     * @return string
+     */
+    private function customerEmailForRw( $user ) {
+        if ( ! $user || empty( $user->ID ) ) {
+            return '';
+        }
+        return trim( (string) \get_user_meta( $user->ID, 'billing_email', true ) );
+    }
+
+    /**
+     * Поиск customerId в RW по email из billing пользователя (устаревший сценарий; см. {@see getCustomerInfo()}).
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return int Идентификатор покупателя RW или 0.
+     * @throws \Exception При HTTP-ошибке ответа RW.
      */
     public function getCustomerId($user) {  //ИЗБЫТОЧНЫЙ МЕТОД! CustomerId можно получить из инфы,
                                             // возвращаемой методом gerCustomerInfo
         $customerId = 0;
-        $parameters = 'email='.urlencode($user->user_email).'&lastId=1&resultsPerPage=100';
+        $parameters = 'email='.urlencode( $this->customerEmailForRw( $user ) ).'&lastId=1&resultsPerPage=100';
         //$parameters = 'email=05abdul%40mail.ru&lastId=1&resultsPerPage=100';
         $args = array( 
             'headers'   => array(
@@ -86,12 +119,14 @@ class RightWay {
         }
         Plugin::get()->log( __( 'Ответ RW на запрос поиска клиента', RIGHTWAY ) . ': ' . $customerId );
         return $customerId;
-    }
+        }
 
-/**
-     * Получение покупателя по номеру телефона (может использоваться, например, при проверке номера на уникальность при редактировании)
-     * @param string $phone 
-     * @return iarray $customersArray Массив данных покупателей
+    /**
+     * Поиск покупателей RW по телефону (GET customers/search).
+     *
+     * @param string $phone Нормализованный номер телефона.
+     * @return array<int, array<string, mixed>>|int Декодированный JSON или 0 до запроса; при ошибке — исключение.
+     * @throws \Exception При кодах ответа 400, 401, 403 и др.
      */
     public function getCustomersByPhone($phone) {
         $customersArray = 0;
@@ -129,12 +164,14 @@ class RightWay {
         }
 
         return $customersArray;
-}
+    }
 
-/**
-     * Получение покупателя по Email (может использоваться, например, при проверке Email на уникальность при редактировании)
-     * @param string $email 
-     * @return iarray $customersArray Массив данных покупателей
+    /**
+     * Поиск покупателей RW по email (GET customers/search).
+     *
+     * @param string $email Email.
+     * @return array<int, array<string, mixed>>|int Декодированный JSON или 0 до запроса.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getCustomersByEmail($email) {
         $customersArray = 0;
@@ -175,15 +212,16 @@ class RightWay {
     }
 
     /**
-     * Получает информацию о клиенте в платформе RightWay
-     * @param string $user_login Username.
-     * @param WP_User WP_User object of the logged-in user.
-     * @return array $customerInfo
+     * Поиск анкет покупателей в RW по billing_email пользователя.
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return array<int, array<string, mixed>>|false Массив записей RW или false, если список пуст.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getCustomerInfo($user) {
 
         $customerId = 0;
-        $parameters = 'email='.urlencode($user->user_email).'&lastId=1&resultsPerPage=100';
+        $parameters = 'email='.urlencode( $this->customerEmailForRw( $user ) ).'&lastId=1&resultsPerPage=100';
         //$parameters = 'email=05abdul%40mail.ru&lastId=1&resultsPerPage=100';
         $args = array( 
             'headers'   => array(
@@ -224,15 +262,17 @@ class RightWay {
     }    
 
     /**
-     * Получает идентификатор контакта в платформе RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return int $contactId
+     * Идентификатор первого контакта (по email-поиску анкеты), устаревший вспомогательный метод.
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return int ID контакта в RW или 0.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getContactId($user) {   //ИЗБЫТОЧНЫЙ МЕТОД! CustomerId можно получить из инфы,
                                             // возвращаемой методом gerCustomerInfo
 
         $contactId = 0;
-        $parameters = 'email='.urlencode($user->user_email).'&lastId=1&resultsPerPage=100';
+        $parameters = 'email='.urlencode( $this->customerEmailForRw( $user ) ).'&lastId=1&resultsPerPage=100';
         //$parameters = 'email=05abdul%40mail.ru&lastId=1&resultsPerPage=100';
         $args = array( 
             'headers'   => array(
@@ -262,9 +302,11 @@ class RightWay {
     }    
 
     /**
-     * Получает данные карты клиента в платформе RightWay
-     * @param string $phone Номер телефона пользователя
-     * @return array $bodyArray Массив объектов карт
+     * Поиск карт по телефону и brandId (GET card/search).
+     *
+     * @param string $phone Телефон.
+     * @return array<int, array<string, mixed>> Декодированный JSON массива карт.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getCardsData($phone) {
 
@@ -295,14 +337,16 @@ class RightWay {
     }
 
     /**
-     * Получает информацию о карте клиента в платформе RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return int $cardInfo
+     * Первая карта из поиска по email пользователя (billing_email).
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return array<string, mixed>|null Элемент карты или null, если не найдено.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getCardInfo($user) {
 
         $cardId = 0;
-        $parameters = 'brandId='.$this->brandId.'&email='.urlencode($user->user_email).'&lastId=1&resultsPerPage=100';
+        $parameters = 'brandId='.$this->brandId.'&email='.urlencode( $this->customerEmailForRw( $user ) ).'&lastId=1&resultsPerPage=100';
         
         $args = array( 
             'headers'   => array(
@@ -331,14 +375,16 @@ class RightWay {
     }    
 
     /**
-     * Определяет, является ли пользователь клиентом платформы RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return bool
+     * Проверяет наличие карты у пользователя по email; возвращает id карты или false.
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return int|string|false ID карты RW или false, если карт нет.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getRWCard($user) {
 
         $cardId = 0;
-        $parameters = 'brandId='.$this->brandId.'&email='.urlencode($user->user_email);
+        $parameters = 'brandId='.$this->brandId.'&email='.urlencode( $this->customerEmailForRw( $user ) );
         //$parameters = 'brandId='.$this->brandId.'&email=05abdul%40mail.ru';
         
         $args = array( 
@@ -372,14 +418,16 @@ class RightWay {
     }
 
     /**
-     * Получает идентификатор клиента платформы RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return bool
+     * CustomerId первой карты, найденной по email пользователя.
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return int|string|false customerId в RW или false.
+     * @throws \Exception При ошибке HTTP.
      */
     public function getRWCustomerId($user) {
 
         $cardId = 0;
-        $parameters = 'brandId='.$this->brandId.'&email='.urlencode($user->user_email);
+        $parameters = 'brandId='.$this->brandId.'&email='.urlencode( $this->customerEmailForRw( $user ) );
         //$parameters = 'brandId='.$this->brandId.'&email=05abdul%40mail.ru';
         
         $args = array( 
@@ -413,9 +461,10 @@ class RightWay {
     }    
 
     /**
-     * Авторизует пользователя на платформе RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return bool Возращает true, если авторизация прошла успешно, и false в случае неудачи.
+     * Заготовка авторизации клиента RW (customerId/contactId); ответ не возвращается.
+     *
+     * @param \WP_User $user Пользователь WordPress.
+     * @return void
      */
     public function authorizeRWClient($user) {
         $customerId = $this->getCustomerId($user);
@@ -426,9 +475,17 @@ class RightWay {
     }
 
     /**
-     * Регистрирует пользователя на платформе RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return bool Возращает true, если регистрация прошла успешно, и false в случае неудачи.
+     * Регистрация покупателя в RW (POST register).
+     *
+     * @param string $contact Канал основного контакта: «phone» или «email».
+     * @param string $value   Телефон или email (в зависимости от $contact).
+     * @param string $token   Второй контакт (email или телефон).
+     * @param string $firstName Имя.
+     * @param string $lastName  Фамилия.
+     * @param string $birthDate Дата рождения (опционально).
+     * @param string $gender    Пол (опционально).
+     * @return string|false Тело ответа JSON при 200 или false при прочих ветках.
+     * @throws \Exception При кодах 400, 402, 422 и др.
      */
     public function registerRWClient($contact, $value, $token, $firstName='', $lastName='', $birthDate='', $gender='') {
         
@@ -485,10 +542,12 @@ class RightWay {
     }
 
     /**
-     * Создает бонусную карту для указанного пользователя на платформе RightWay
-     * @param WP_User WP_User object of the logged-in user.
-     * @return bool Возращает true, если создание прошло успешно, и false в случае неудачи.
-     */    
+     * Создание бонусной карты для покупателя RW (POST card).
+     *
+     * @param int|string $customerId Идентификатор покупателя в RW.
+     * @return string|false Тело ответа JSON при успехе или false.
+     * @throws \Exception При 400, 402, 404, 424 и др.
+     */
     public function createRWCard($customerId) {
         $parameters = '?customerId='.$customerId;
         $args = array( 
@@ -542,9 +601,11 @@ class RightWay {
     }    
 
     /**
-     * Получаем количество доступных для списания бонусов на платформе RightWay.
-     * @param string Идентификатор карты
-     * @return int Возращает количество бонусов, если у клиента на карте они есть, и 0, если карта пустая.
+     * Пакеты бонусов по карте (GET card/bonus-packs/{cardId}).
+     *
+     * @param int|string $cardId Идентификатор карты в RW.
+     * @return array<string, mixed> Декодированный JSON ответа.
+     * @throws \Exception При 401, 403, 404 и др.
      */
     public function getCustomerRWBonuses($cardId) {
         $parameters = 'bonus-packs/'.$cardId;
@@ -582,9 +643,11 @@ class RightWay {
     }
 
     /**
-     * Получаем персональную информацию о владельце карты и информацию о состоянии карты на платформе RightWay.
-     * @param string Идентификатор карты
-     * @return array Возращает данные по карте
+     * Сводка по карте (GET card/summary/{cardId}), тело ответа как строка JSON.
+     *
+     * @param int|string $cardId Идентификатор карты в RW.
+     * @return string Тело ответа.
+     * @throws \Exception При 401, 403, 404 и др.
      */
     public function getCardSummary($cardId) {
         $parameters = 'summary/'.$cardId;
@@ -624,8 +687,11 @@ class RightWay {
     }    
 
     /**
-     * Получаем код подтверждения для обновления анкетных данных или работы с бонусами при покупке на платформе RightWay.
-     * @return int Возращает код подтверждения.
+     * Запрос кода подтверждения для контакта (GET contacts/{id}/send-confirmation-code/...).
+     *
+     * @param int|string $contactId Идентификатор контакта в RW.
+     * @return void При 204 тело пустое, значение не возвращается.
+     * @throws \Exception При 403, 404, 409, 429 и др.
      */
     public function sendConfirmationCode($contactId) {
         $parameters = '/'.$contactId.'/send-confirmation-code/'.$this->brandId;
@@ -664,10 +730,14 @@ class RightWay {
     }
 
     /**
-     * Получаем код подтверждения для обновления контакта на платформе RightWay.
+     * Запрос кода подтверждения по значению контакта (телефон/email).
+     *
+     * @param string $contactValue Нормализованное значение контакта в URL RW.
+     * @return void При 204 ответ без тела.
+     * @throws \Exception При 400, 403, 404, 409, 429 и др.
      */
     public function sendContactConfirmationCode($contactValue) {
-        $parameters = '/send-confirmation-code/'.$contactValue.'/'.$this->brandId;
+        $parameters = '/send-confirmation-code/'.rawurlencode( $contactValue ).'/'.$this->brandId;
         
         $args = array( 
             'headers'   => array(
@@ -708,9 +778,11 @@ class RightWay {
     }
 
     /**
-     * Получает контакта покупателя с указанным customerId на платформе RightWay
-     * @param string $customerId CustomerId in RW database.
-     * @return array Возращает массив контактов пользователя.
+     * Список контактов покупателя (GET customers/{customerId}/contacts, заголовок TSSA).
+     *
+     * @param int|string $customerId Идентификатор покупателя в RW.
+     * @return array<int, array<string, mixed>> Массив контактов.
+     * @throws \Exception При 401 и др.
      */
     public function getCustomerContacts($customerId) {
         $parameters = '/'.$customerId.'/contacts';
@@ -750,9 +822,12 @@ class RightWay {
     }    
 
     /**
-     * Обновляет данные покупателя на платформе RightWay
-     * @param array $customData Updated Customer Data.
-     * @param string $customerId CustomerId in RW database.
+     * Обновление анкеты покупателя (PUT customers?customerId=...).
+     *
+     * @param array<string, mixed> $customData Поля анкеты для RW.
+     * @param int|string           $customerId Идентификатор покупателя в RW.
+     * @return array<string, mixed>|null Результат json_decode тела ответа при 204 (часто null).
+     * @throws \Exception При 400, 403, 422 и др.
      */
     public function updateCustomerData($customData,$customerId) {
         $parameters = 'customerId='.$customerId;
@@ -796,10 +871,15 @@ class RightWay {
     }
     
     /**
-     * Получаем подтверждение контакта пользователя на платформе RightWay.
+     * Подтверждение контакта кодом; возвращает токен для последующих операций.
+     *
+     * @param string $contactValue Значение контакта в сегменте URL RW.
+     * @param string|int $confirmCode Код из SMS/email.
+     * @return string Ключ confirmedContactToken из ответа.
+     * @throws \Exception При 400, 422, 429 и др.
      */
     public function getToken($contactValue, $confirmCode) {
-        $parameters = '/confirm/'.$contactValue.'/'.$this->brandId;
+        $parameters = '/confirm/'.rawurlencode( $contactValue ).'/'.$this->brandId;
         
         $args = array( 
             'headers'   => array(
@@ -839,10 +919,14 @@ class RightWay {
         }
     }
 
-/**
-     * Добавляет контакт покупателю на платформе RightWay
-     * @param array $customData Updated Customer Data.
-     * @param string $customerId CustomerId in RW database.
+    /**
+     * Добавление контакта покупателю (POST contacts/add?customerId=...).
+     *
+     * @param array<string, mixed> $contactData Тело запроса (тип контакта, значение и т.д.).
+     * @param int|string           $customerId  Идентификатор покупателя в RW.
+     * @param string               $token       Зарезервировано (в коде не подставляется в заголовок).
+     * @return void При успехе код 204 без тела.
+     * @throws \Exception При 400, 403 и др.
      */
     public function createContactData($contactData, $customerId, $token) {
         $parameters = '/add?customerId='.$customerId;
@@ -881,9 +965,13 @@ class RightWay {
     }
 
     /**
-     * Обновляет данные покупателя на платформе RightWay
-     * @param array $customData Updated Customer Data.
-     * @param string $customerId CustomerId in RW database.
+     * Изменение контакта (PUT contacts/{contactId}?customerId=...).
+     *
+     * @param array<string, mixed> $contactData Поля контакта.
+     * @param int|string             $contactId   Идентификатор контакта в RW.
+     * @param int|string             $customerId  Идентификатор покупателя в RW.
+     * @return void При успехе 204.
+     * @throws \Exception При 400, 403, 404 и др.
      */
     public function updateContactData($contactData,$contactId,$customerId) {
         $parameters = '/'.$contactId.'?customerId='.$customerId;
@@ -924,13 +1012,14 @@ class RightWay {
         }
     }
 
-/**
-     * Объединяет карты на платформе RightWay
-     * @param array $customData Updated Customer Data.
-     * @param string $customerId CustomerId in RW database.
+    /**
+     * Объединение карт (POST card/merge).
+     *
+     * @param array<string, mixed> $cardsData JSON-тело запроса объединения.
+     * @return void
+     * @throws \Exception При 400, 404 и др.
      */
     public function mergeCards($cardsData) {
-        $parameters = '/'.$contactId.'?customerId='.$customerId;
         $args = array( 
             'body' => json_encode($cardsData, JSON_UNESCAPED_UNICODE),            
             'method'      => 'POST',
@@ -943,11 +1032,11 @@ class RightWay {
             )
 
         );
-        Plugin::get()->log($this->rwApiUrlMerge);
+        Plugin::get()->log($this->rwApiUrlCardMerge);
         Plugin::get()->log($args['body']);
 
         // Отправляем запрос
-        $response = wp_remote_post( $this->rwApiUrlMerge, $args );
+        $response = wp_remote_post( $this->rwApiUrlCardMerge, $args );
         Plugin::get()->log( __( 'Объединение карт', RIGHTWAY ) . ': ' . wp_remote_retrieve_response_code($response) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
@@ -968,9 +1057,12 @@ class RightWay {
     }    
     
     /**
-     * Обновляем настройки коммуникации для данной карты на платформе RightWay.
-     * @param array $communicationData Updated Communication Data.
-     * @param string $cardId CardId in RW database.
+     * Настройки коммуникаций по карте (PUT card/{cardId}).
+     *
+     * @param array<string, mixed> $communicationData Флаги каналов и рассылок для RW.
+     * @param int|string           $cardId            Идентификатор карты в RW.
+     * @return void При успехе 204.
+     * @throws \Exception С разбором типичных сообщений RW при 400 и при прочих кодах.
      */
     public function updateCommunicationData($communicationData, $cardId) {
         $parameters = $cardId;
@@ -987,8 +1079,8 @@ class RightWay {
             'body' => json_encode($communicationData, JSON_UNESCAPED_UNICODE)
         );
 
-        // Отправляем запрос
-        $response = wp_remote_get( $this->rwApiUrlCard . '/'.$parameters, $args );
+        // Отправляем запрос (явный request + PUT — не смешивать с GET).
+        $response = wp_remote_request( $this->rwApiUrlCard . '/'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log( 'Обновление данных коммуникации: '.$this->rwApiUrlCard . '/'.$parameters);
         Plugin::get()->log( $args['body']);
@@ -997,7 +1089,20 @@ class RightWay {
                 Plugin::get()->log( 'Данные коммуникации успешно обновлены' );
                 break;            
             case 400:
-                throw new \Exception(wp_remote_retrieve_response_code($response).' '.wp_remote_retrieve_response_message($response));
+                $body400 = wp_remote_retrieve_body( $response );
+                Plugin::get()->log( 'Тело ответа RW (400): ' . $body400 );
+                $decoded400 = json_decode( $body400, true );
+                if ( is_array( $decoded400 ) && ! empty( $decoded400['message'] ) ) {
+                    $rwMsg = $decoded400['message'];
+                    if ( stripos( $rwMsg, 'empty contact data' ) !== false && stripos( $rwMsg, 'Email' ) !== false ) {
+                        throw new \Exception( __( 'Нельзя включить рассылку по email: в программе лояльности нет email-контакта. Укажите email в анкете или отключите канал Email.', RIGHTWAY ) );
+                    }
+                    if ( stripos( $rwMsg, 'empty contact data' ) !== false && stripos( $rwMsg, 'Sms' ) !== false ) {
+                        throw new \Exception( __( 'Нельзя включить SMS: в программе лояльности нет подтверждённого телефона.', RIGHTWAY ) );
+                    }
+                    throw new \Exception( $rwMsg );
+                }
+                throw new \Exception( wp_remote_retrieve_response_code( $response ) . ' ' . wp_remote_retrieve_response_message( $response ) );
             case 401:
                 throw new \Exception('Переданный токен невалиден');
                 break;
@@ -1013,8 +1118,11 @@ class RightWay {
     }
 
     /**
-     * Получаем данные карты покупателя на платформе RightWay.
-     * @param string $customerId customerId in RW database.
+     * Карты покупателя по бренду (GET customers/{customerId}/cards?brandId=...).
+     *
+     * @param int|string $customerId Идентификатор покупателя в RW.
+     * @return string JSON-тело ответа.
+     * @throws \Exception При кодах ответа вне 200.
      */
     public function getCustomerCardData($customerId) {
         $parameters = '/'.$customerId.'/cards?brandId='.$this->brandId;
@@ -1042,8 +1150,12 @@ class RightWay {
     }    
 
     /**
-     * Предварительный расчет количества бонусов к списанию и/или начислению
-     */    
+     * Предварительный расчёт бонусов по чеку (XML processing calculateSale).
+     *
+     * @param string $cheque XML тела запроса для RW processing.
+     * @return \SimpleXMLElement|false Разобранный ответ или false при ошибке разбора.
+     * @throws \Exception Если {@see wp_remote_post} не вернул ответ.
+     */
     public function calculateSale($cheque) {
         $parameters = '/calculateSale';
         $args = array( 
@@ -1078,8 +1190,12 @@ class RightWay {
     }
 
     /**
-     * Отправка данных о заказе для списания и/или начисления бонусов
-     */    
+     * Списание/начисление бонусов по чеку (XML processing applyPurchase).
+     *
+     * @param string $cheque XML тела запроса.
+     * @return \SimpleXMLElement|false
+     * @throws \Exception Если {@see wp_remote_post} не вернул ответ.
+     */
     public function applyPurchase($cheque) {
         $parameters = '/applyPurchase';
         $args = array( 
@@ -1113,8 +1229,12 @@ class RightWay {
     } 
     
     /**
-     * Предварительный расчет количества бонусов к возврату
-     */    
+     * Предварительный расчёт возврата бонусов (XML processing calculateReturn).
+     *
+     * @param string $cheque XML тела запроса.
+     * @return \SimpleXMLElement|false
+     * @throws \Exception Если {@see wp_remote_post} не вернул ответ.
+     */
     public function calculateReturn($cheque) {
         $parameters = '/calculateReturn';
         $args = array( 
@@ -1149,8 +1269,12 @@ class RightWay {
     } 
     
     /**
-     * Возврат бонусов
-     */    
+     * Применение возврата бонусов (XML processing applyReturn).
+     *
+     * @param string $cheque XML тела запроса.
+     * @return \SimpleXMLElement|false
+     * @throws \Exception Если {@see wp_remote_post} не вернул ответ.
+     */
     public function applyReturn($cheque) {
         $parameters = '/applyReturn';
         $args = array( 
@@ -1185,8 +1309,12 @@ class RightWay {
     }
     
     /**
-     * Получение скидки при отсутствии бонусной карты
-     */    
+     * Расчёт скидки/бонусов без карты (XML processing calculateSaleWithoutCard).
+     *
+     * @param string $cheque XML тела запроса.
+     * @return \SimpleXMLElement|false
+     * @throws \Exception Если {@see wp_remote_post} не вернул ответ.
+     */
     public function calculateSaleWithoutCard($cheque) {
         $parameters = '/calculateSaleWithoutCard';
         $args = array( 
