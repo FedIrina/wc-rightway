@@ -1817,7 +1817,10 @@ class Plugin
 		$updatedCustomerRWInfo['middleName'] = '';
 		$updatedCustomerRWInfo['lastName'] = (isset($_POST['billing_last_name']))? $_POST['billing_last_name']:'';
 		$updatedCustomerRWInfo['gender'] =  (isset($_POST['gender']))?$_POST['gender']:'';
-		$updatedCustomerRWInfo['birthDate'] = (isset($_POST['birthDate']))?$_POST['birthDate']:'';
+		$birth_date = isset( $_POST['birthDate'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['birthDate'] ) ) ) : '';
+		if ( $birth_date !== '' ) {
+			$updatedCustomerRWInfo['birthDate'] = $birth_date;
+		}
 		ob_start();
 		print_r( $updatedCustomerRWInfo );
 		Plugin::get()->log(ob_get_clean());
