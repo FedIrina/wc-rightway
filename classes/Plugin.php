@@ -1,83 +1,79 @@
 <?php
 /**
- * Класс Plugin
- * Основной класс плагина. 
- * Является singleton, то есть обращение из любого места должно быть таким Plugin::get()
+ * Ядро плагина RightWay для WooCommerce: хуки, AJAX, личный кабинет, checkout, настройки.
+ *
+ * Singleton: один раз {@see self::init()}, затем {@see self::get()}.
+ *
+ * @package RIGHTWAY
  */
 namespace RIGHTWAY;
 
 class Plugin
 {
-	/**
-	 * Путь к папке плагина
-	 */
+	/** @var string Абсолютный путь к каталогу плагина. */
 	public $path;
-	
-	/**
-	 * URL к папке плагина
-	 */
+
+	/** @var string URL каталога плагина. */
 	public $url;
-	
-	/**
-	 * Название плагина
-	 */
+
+	/** @var string Имя плагина (из заголовка главного файла). */
 	public $name;
 
-	/**
-	 * Версия плагина
-	 */
+	/** @var string Версия плагина. */
 	public $version;
 
-	/**
-     * @var $rightWayAPI
-     */
-    public $rightWayAPI = null;
+	/** @var RightWay|null Клиент API RightWay. */
+	public $rightWayAPI = null;
 
-	/**
-     * Идентификатор пользователя в RW
-     */
-    private $customerId = '';
+	/** @var string|int Идентификатор покупателя RW (кэш на время запроса). */
+	private $customerId = '';
 
-	/**
-     * Идентификатор контакта текущего пользователя
-     */
-    private $contactId = '';
+	/** @var string|int Идентификатор контакта RW. */
+	private $contactId = '';
 
-	/**
-     * Номер бонусной карты текущего пользователя
-     */
-    private $cardNumber = '';
+	/** @var string Номер бонусной карты RW. */
+	private $cardNumber = '';
 
+	/** @var string Опция WooCommerce wc_rightway_api_key. */
 	private $wc_rightway_api_key;
+	/** @var string Опция wc_rightway_api_version. */
 	private $wc_rightway_api_version;
+	/** @var string Опция wc_rightway_tssa_key. */
 	private $wc_rightway_tssa_key;
+	/** @var string Опция wc_rightway_x_processing_key. */
 	private $wc_rightway_x_processing_key;
+	/** @var string Опция wc_rightway_x_processing_version. */
 	private $wc_rightway_x_processing_version;
+	/** @var string|int Опция wc_rightway_brand_id. */
 	private $wc_rightway_brand_id;
+	/** @var string Опция wc_rightway_shop_name. */
 	private $wc_rightway_shop_name;
-	
+
+	/** @var self|null Единственный экземпляр плагина. */
+	private static $instance = null;
+
 	/**
-     * @var Plugin
-     */
-    private static $instance = null;
-/**
-	 * Иницмиализация плагина
-	 * Должна вызываться только один раз. 
-	 * @param string	$path	Путь к папке плагина
-	 * @param string	$url	URL к папке плагина
-	 * @param string	$meta	Мета-данные плагина
+	 * Инициализация singleton (вызывать один раз при загрузке плагина).
+	 *
+	 * @param string              $path Путь к каталогу плагина.
+	 * @param string              $url  URL каталога плагина.
+	 * @param array<string, string> $meta Результат {@see get_file_data()}: Name, Version и др.
+	 * @return void
 	 */
 	public static function init( $path, $url, $meta )
 	{
-		if ( static::$instance !== null )
-			throw new \Exception( __('Объект Plugin уже инициализирован!', RIGHTWAY) );
-		
+		if ( static::$instance !== null ) {
+			return;
+		}
+
 		static::$instance = new static( $path, $url, $meta );
 	}
 
 	/**
-	 * Возвращает объект плагина
-	 * @return	Plugin
+	 * Текущий экземпляр плагина.
+	 *
+	 * @return self
+	 * @throws \Exception Если {@see init()} ещё не вызывали.
 	 */
 	public static function get()
 	{
@@ -88,10 +84,12 @@ class Plugin
 	}
 	
 	/**
-	 * Конструктор плагина
-	 * @param string	$path	Путь к папке плагина
-	 * @param string	$url	URL к папке плагина
-	 * @param string	$meta	Мета-данные плагина
+	 * Регистрация хуков WooCommerce/WordPress и создание {@see $rightWayAPI}.
+	 *
+	 * @param string              $path См. {@see init()}.
+	 * @param string              $url  См. {@see init()}.
+	 * @param array<string, string> $meta См. {@see init()}.
+	 * @return void
 	 */
 	private function __construct( $path, $url, $meta )
 	{
@@ -106,7 +104,7 @@ class Plugin
 		$this->wc_rightway_x_processing_key = \WC_Admin_Settings::get_option('wc_rightway_x_processing_key');
 		$this->wc_rightway_x_processing_version = \WC_Admin_Settings::get_option('wc_rightway_x_processing_version');
 		$this->wc_rightway_brand_id = \WC_Admin_Settings::get_option('wc_rightway_brand_id');
-		$this->wc_rightway_shop_name = \WC_Admin_Settings::get_option('wc_rightway_shop_namen');
+		$this->wc_rightway_shop_name = \WC_Admin_Settings::get_option('wc_rightway_shop_name');
 
 
 		$this->rightWayAPI = new RightWay($this->wc_rightway_brand_id, $this->wc_rightway_shop_name, $this->wc_rightway_api_key, $this->wc_rightway_api_version, $this->wc_rightway_tssa_key, $this->wc_rightway_x_processing_version, $this->wc_rightway_x_processing_key);
@@ -135,8 +133,7 @@ class Plugin
 		add_action( 'wp_ajax_rightway_edit_communication_data', array( $this, 'edit_RW_communiction_data' ) );
 		add_action( 'wp_ajax_rightway_get_active_bonuses', array( $this, 'get_active_bonuses' ) );
 		add_action( 'wp_ajax_rightway_calculateActionDiscount', array( $this, 'calculateActionDiscount' ) );
-		add_action( 'wp_ajax_nopriv_rightway_calculateActionDiscount', array( $this, 'calculateActionDiscount' ) );		
-		add_action( 'plugins_loaded', array( $this, 'plugins_loaded' ) );
+		add_action( 'wp_ajax_nopriv_rightway_calculateActionDiscount', array( $this, 'calculateActionDiscount' ) );
 
 		add_action( 'init', array( $this, 'wp_init' ) );
 		/* add_action( 'wp_login', array( $this, 'getRwAuth' ), 10); */
@@ -174,57 +171,266 @@ class Plugin
 		/* add_action( 'woocommerce_after_save_address_validation', array( $this, 'edit_RW_customer_data' ), 1, 4); */
 		//add_filter( 'woocommerce_billing_fields', array( $this, 'add_custom_billing_fields' ), 999, 1 );
 		add_action( 'wp_footer', array( $this, 'add_confirm_modal_template' ), 9999 );
+
+		$this->plugins_loaded();
 	}
 
 	/**
-	 * Подключение скриптов
+	 * Регистрация и подключение JS/CSS на checkout и на страницах ЛК с OTP/RW, локализация для AJAX.
+	 *
+	 * @return void
 	 */
 	public function add_scripts() {
-		if ( is_page('checkout') ) {
-			if (is_user_logged_in()) {
-				$user = wp_get_current_user();				
-				$this->$contactId = get_user_meta( $user->ID, 'contactId', true ); // Текущий контакт пользователя в RW
-				$this->customerId = get_user_meta( $user->ID, 'customerId', true ); // Идентификатор пользователя в RW				
-				$this->cardNumber = get_user_meta( $user->ID, 'cardNumber', true ); // Номер бонусной карты пользователя в RW				
-			}
-			// Проверяем, не подключен ли уже FancyBox
-			$fancybox_handle = $this->enqueue_fancybox_if_needed();
-			$dependencies = array('wc-checkout');
-			if ( $fancybox_handle ) {
-				$dependencies[] = $fancybox_handle;
-			}
-			wp_enqueue_script( 'rigtway-js', $this->url.'assets/js/rightway.js', $dependencies, null, true );
-			wp_enqueue_style( 'rigtway-css', $this->url.'assets/css/style.css');
-		}
-		if ( is_account_page() ){
-			if (is_user_logged_in()) {
-				$user = wp_get_current_user();				
-				$this->$contactId = get_user_meta( $user->ID, 'contactId', true ); // Текущий контакт пользователя в RW
-				$this->customerId = get_user_meta( $user->ID, 'customerId', true ); // Идентификатор пользователя в RW				
-				$this->cardNumber = get_user_meta( $user->ID, 'cardNumber', true ); // Номер бонусной карты пользователя в RW
-			}
-			// Проверяем, не подключен ли уже FancyBox
- 			$fancybox_handle = $this->enqueue_fancybox_if_needed();
-			$dependencies = array();
-			if ( $fancybox_handle ) {
-				$dependencies[] = $fancybox_handle;
-			}
-			wp_enqueue_script( 'rigtway-js', $this->url.'assets/js/rightway.js', array('jquery','fancybox-js'), null, true );
-			wp_enqueue_style( 'rigtway-css', $this->url.'assets/css/style.css');
-		}
+		wp_register_script(
+			'rightway-confirm-code',
+			$this->url . 'assets/js/rightway-confirm-code.js',
+			array(),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-core',
+			$this->url . 'assets/js/rightway-core.js',
+			array(),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-otp-state',
+			$this->url . 'assets/js/rightway-otp-state.js',
+			array(),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-api',
+			$this->url . 'assets/js/rightway-api.js',
+			array( 'rightway-core' ),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-confirm-modal',
+			$this->url . 'assets/js/rightway-confirm-modal.js',
+			array( 'jquery', 'rightway-core', 'rightway-otp-state', 'rightway-confirm-code' ),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-lk-shared',
+			$this->url . 'assets/js/rightway-lk-shared.js',
+			array( 'rightway-api', 'rightway-confirm-modal' ),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-communication',
+			$this->url . 'assets/js/rightway-communication.js',
+			array( 'jquery', 'rightway-api', 'rightway-confirm-modal' ),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-billing',
+			$this->url . 'assets/js/rightway-billing.js',
+			array( 'jquery', 'rightway-lk-shared' ),
+			$this->version,
+			true
+		);
+		wp_register_script(
+			'rightway-checkout-otp',
+			$this->url . 'assets/js/rightway-checkout-otp.js',
+			array( 'wc-checkout', 'rightway-api', 'rightway-confirm-modal' ),
+			$this->version,
+			true
+		);
 
-		wp_localize_script( 'rigtway-js', 'rightway', array(
-			'ajax_url' => admin_url( 'admin-ajax.php' ),
-			'nonce_code' => wp_create_nonce( 'rigtway-nonce' ),
-			'customerId'	=> $this->customerId,
-			'contactId'	=> $this->contactId,
-			'cardNumber'	=> $this->cardNumber
-		));		
+		if ( $this->should_enqueue_rightway_frontend_scripts() ) {
+			$this->load_rightway_user_meta_for_current_user();
+
+			wp_enqueue_style( 'rigtway-css', $this->url . 'assets/css/style.css', array(), $this->version );
+
+			if ( $this->is_account_endpoint_active( 'my-bonuses' ) ) {
+				return;
+			}
+
+			$fancybox_handle = $this->enqueue_fancybox_if_needed();
+			$this->enqueue_wc_jquery_blockui();
+
+			$is_checkout  = $this->is_rightway_checkout_page();
+			$dependencies = array( 'wc-jquery-blockui', 'rightway-confirm-code', 'rightway-core', 'rightway-api', 'rightway-otp-state', 'rightway-confirm-modal' );
+			if ( $is_checkout ) {
+				$dependencies = array_merge( array( 'wc-checkout' ), $dependencies );
+			} else {
+				$dependencies = array_merge( array( 'jquery' ), $dependencies );
+			}
+			if ( $fancybox_handle ) {
+				$dependencies[] = $fancybox_handle;
+			}
+
+			$rightway_localize = array(
+				'ajax_url' => admin_url( 'admin-ajax.php' ),
+				'nonce_code' => wp_create_nonce( 'rigtway-nonce' ),
+				'customerId'	=> $this->customerId,
+				'contactId'	=> $this->contactId,
+				'cardNumber'	=> $this->cardNumber,
+				'billing_email_saved' => ( is_user_logged_in() ) ? trim( (string) get_user_meta( get_current_user_id(), 'billing_email', true ) ) : '',
+			);
+
+			if ( $is_checkout ) {
+				wp_enqueue_script( 'rightway-checkout-otp', $this->url . 'assets/js/rightway-checkout-otp.js', $dependencies, $this->version, true );
+				wp_localize_script( 'rightway-checkout-otp', 'rightway', $rightway_localize );
+				wp_enqueue_script(
+					'rightway-checkout',
+					$this->url . 'assets/js/rightway-checkout.js',
+					array( 'rightway-checkout-otp' ),
+					$this->version,
+					true
+				);
+			} elseif ( $this->is_account_endpoint_active( 'communication-options' ) ) {
+				wp_enqueue_script( 'rightway-communication', $this->url . 'assets/js/rightway-communication.js', $dependencies, $this->version, true );
+				wp_localize_script( 'rightway-communication', 'rightway', $rightway_localize );
+			} elseif ( $this->is_account_endpoint_active( 'edit-address', 'billing' ) ) {
+				wp_enqueue_script( 'rightway-lk-shared', $this->url . 'assets/js/rightway-lk-shared.js', $dependencies, $this->version, true );
+				wp_localize_script( 'rightway-lk-shared', 'rightway', $rightway_localize );
+				wp_enqueue_script( 'rightway-billing', $this->url . 'assets/js/rightway-billing.js', array( 'rightway-lk-shared' ), $this->version, true );
+			}
+		}
 	}
 
 	/**
-	 * Проверка и подключение FancyBox, если он еще не подключен
-	 * @return string|null Handle подключенного скрипта FancyBox или null, если он уже был подключен
+	 * Активен ли эндпоинт ЛК WooCommerce (в т.ч. кастомные {@see add_rewrite_endpoint}, не только ядро WC).
+	 *
+	 * @param string      $endpoint Имя query var, например `my-bonuses`.
+	 * @param string|null $value    Ожидаемое значение (для `edit-address` → `billing`).
+	 * @return bool
+	 */
+	private function is_account_endpoint_active( $endpoint, $value = null ) {
+		if ( ! function_exists( 'is_account_page' ) || ! is_account_page() ) {
+			return false;
+		}
+		global $wp;
+		if ( ! isset( $wp->query_vars[ $endpoint ] ) ) {
+			return false;
+		}
+		if ( null === $value ) {
+			return true;
+		}
+		return (string) $wp->query_vars[ $endpoint ] === (string) $value;
+	}
+
+	/**
+	 * Подключать ли сценарные скрипты RW: checkout, «Настройки», «Данные покупателя», «Мои бонусы».
+	 *
+	 * @return bool
+	 */
+	private function should_enqueue_rightway_frontend_scripts() {
+		if ( $this->is_rightway_checkout_page() ) {
+			return true;
+		}
+		if ( $this->is_account_endpoint_active( 'communication-options' ) ) {
+			return true;
+		}
+		if ( $this->is_account_endpoint_active( 'my-bonuses' ) ) {
+			return true;
+		}
+		if ( $this->is_account_endpoint_active( 'edit-address', 'billing' ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @return bool
+	 */
+	private function is_rightway_checkout_page() {
+		if ( function_exists( 'is_checkout' ) && is_checkout() ) {
+			return true;
+		}
+		return is_page( 'checkout' );
+	}
+
+	/**
+	 * Мета RW текущего пользователя для wp_localize_script.
+	 *
+	 * @return void
+	 */
+	private function load_rightway_user_meta_for_current_user() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+		$user = wp_get_current_user();
+		$this->contactId  = get_user_meta( $user->ID, 'contactId', true );
+		$this->customerId = get_user_meta( $user->ID, 'customerId', true );
+		$this->cardNumber = get_user_meta( $user->ID, 'cardNumber', true );
+	}
+
+	/**
+	 * Регистрирует и подключает jquery.blockUI из каталога WooCommerce (тот же файл, что и у WC).
+	 *
+	 * @return void
+	 */
+	private function enqueue_wc_jquery_blockui() {
+		if ( ! defined( 'WC_PLUGIN_FILE' ) ) {
+			return;
+		}
+		if ( ! wp_script_is( 'wc-jquery-blockui', 'registered' ) ) {
+			$suffix = ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) ? '' : '.min';
+			wp_register_script(
+				'wc-jquery-blockui',
+				plugins_url( 'assets/js/jquery-blockui/jquery.blockUI' . $suffix . '.js', WC_PLUGIN_FILE ),
+				array( 'jquery' ),
+				defined( 'WC_VERSION' ) ? WC_VERSION : '1.0',
+				true
+			);
+		}
+		wp_enqueue_script( 'wc-jquery-blockui' );
+	}
+
+	/**
+	 * Проверка nonce для AJAX RightWay: POST-параметр nonce_code, действие rigtway-nonce.
+	 *
+	 * @return void При ошибке завершает запрос (стандартный ответ WordPress для AJAX).
+	 */
+	private function verify_rightway_ajax_nonce() {
+		check_ajax_referer( 'rigtway-nonce', 'nonce_code' );
+	}
+
+	/**
+	 * Флаг настроек коммуникации RW в ответе API (boolean или строка/число).
+	 *
+	 * @param mixed $value Значение из communicationSettings.
+	 * @return bool
+	 */
+	private function rw_communication_flag_is_on( $value ) {
+		return true === $value || 'true' === $value || 1 === $value || '1' === $value;
+	}
+
+	/**
+	 * Проверяет, что контакт RW с данным id принадлежит указанному в RW покупателю.
+	 *
+	 * @param int|string $contact_id Идентификатор контакта в RW.
+	 * @param int|string $customer_id Идентификатор покупателя в RW.
+	 * @return void
+	 * @throws \Exception Если контакт не найден в списке или запрос к API не удался.
+	 */
+	private function assert_rw_contact_belongs_to_customer( $contact_id, $customer_id ) {
+		$contacts = $this->rightWayAPI->getCustomerContacts( $customer_id );
+		if ( ! is_array( $contacts ) ) {
+			throw new \Exception( 'Не удалось получить список контактов.' );
+		}
+		foreach ( $contacts as $c ) {
+			if ( isset( $c['id'] ) && (string) $c['id'] === (string) $contact_id ) {
+				return;
+			}
+		}
+		throw new \Exception( 'Контакт не принадлежит текущему покупателю в программе лояльности.' );
+	}
+
+	/**
+	 * Подключает FancyBox из плагина, если тема/другие плагины ещё не подключили известный handle.
+	 *
+	 * @return string|null Handle скрипта для зависимостей или null, если FancyBox уже в очереди.
 	 */
 	private function enqueue_fancybox_if_needed() {
 		// Проверяем распространенные имена handle для FancyBox
@@ -259,8 +465,10 @@ class Plugin
 	}
 
 	/**
-	 * Вывод дополнительных полей в профиль пользоваеля в админке
-	 * @param pbject $user Объект пользователя
+	 * Поля RW (customerId, cardId, cardNumber) в профиле пользователя в админке.
+	 *
+	 * @param \WP_User $user Редактируемый пользователь.
+	 * @return void
 	 */
 	public function additional_user_profile_fields( $user ) {
 		echo '<table class="form-table">';
@@ -282,8 +490,10 @@ class Plugin
 	}
 
 	/**
-	 * Сохранение дополнительных полей в профиль пользоваеля в админке
-	 * @param pbject $user Объект пользователя
+	 * Сохранение полей RW из формы профиля в админке.
+	 *
+	 * @param int $user_id ID пользователя.
+	 * @return void
 	 */
 	public function save_additional_user_profile_fields( $user_id ) {
 		update_user_meta( $user_id, 'customerId', sanitize_text_field( $_POST[ 'customerId' ] ) );
@@ -292,7 +502,9 @@ class Plugin
 	}
 
 	/**
-	 * Плагины загружены
+	 * Загрузка текстового домена плагина (вызывается из {@see __construct()}).
+	 *
+	 * @return void
 	 */
 	public function plugins_loaded()
 	{
@@ -301,7 +513,9 @@ class Plugin
 	}
 	
 	/**
-	 * Хук init
+	 * Хук {@see 'init'}: проверка активности WooCommerce, иначе предупреждение в админке.
+	 *
+	 * @return void
 	 */
 	public function wp_init()
 	{
@@ -314,12 +528,19 @@ class Plugin
 
 	}
 
+	/**
+	 * Хук {@see 'wp_logout'}: зарезервировано под очистку сессии RW.
+	 *
+	 * @return void
+	 */
 	public function my_end_session(){
 		/* session_destroy(); */
 	}
 	
 	/**
-	 * Предупреждение об отсутствии WooCommerce
+	 * Админ-уведомление: WooCommerce не активен.
+	 *
+	 * @return void
 	 */
 	public function showNoticeNoWC()
 	{
@@ -333,14 +554,16 @@ class Plugin
 	}
 
 	/**
-	 * Имя файла лога
+	 * Имя файла лога в каталоге плагина по умолчанию.
 	 */
 	const LOGFILE = 'rightway.log';
-	
+
 	/**
-	 * Записывает сообщение в лог, если включена отладка
-	 * @param mixed $message	Сообщение или объект
-	 * @param string $logfile	Имя лога в которй пишется сообщение. Если пусто -- в общий лог WP
+	 * Пишет строку или дамп массива/объекта в файл лога плагина или в {@see error_log()}.
+	 *
+	 * @param string|array|object $message Сообщение или структура для print_r.
+	 * @param string              $logfile Имя файла в каталоге плагина; пустая строка — только error_log для строк.
+	 * @return void
 	 */
 	public function log( $message, $logfile = self::LOGFILE )
 	{
@@ -351,9 +574,9 @@ class Plugin
 			}
 			if (is_array($message) || is_object($message)) 
 			{
-                if ( empty( $logfile ) )
+				if ( empty( $logfile ) )
 				{
-	
+
 				} else
 				{
 					file_put_contents( $logfile, 
@@ -363,7 +586,7 @@ class Plugin
 			} 
 			else 
 			{
-                if ( empty( $logfile ) )
+				if ( empty( $logfile ) )
 				{
 					error_log( RIGHTWAY . ': ' . $message );
 				}
@@ -373,15 +596,14 @@ class Plugin
 						'[' . date('d.m.Y H:i:s') . '] ' . ': ' . $message . PHP_EOL, 
 						FILE_APPEND );	
 				}				
-            }			
+			}			
 		//}
 	}
 
 	/**
-	 * Load the translation
+	 * Загрузка переводов (дополнительный метод; основной домен подключается в {@see plugins_loaded()}).
 	 *
-	 * @since    1.0.0
-	 * @filter plugin_locale
+	 * @return void
 	 */
 	public function load_plugin_textdomain() {
 		$locale = is_admin() && function_exists( 'get_user_locale' ) ? get_user_locale() : get_locale();
@@ -391,6 +613,13 @@ class Plugin
 		load_plugin_textdomain( 'wc-whatsapp-notification', false, plugin_basename( dirname( __FILE__ ) ) . '/languages/' );
 	}
 
+	/**
+	 * Выбор contactId в RW для отправки кода: по разрешённым каналам и типу контакта (Sms/Email).
+	 *
+	 * @param \WP_User $user         Пользователь.
+	 * @param string   $mainContact Принудительно «Sms» или «Email»; пусто — по мета allowSms/allowEmail.
+	 * @return int|string|null ID контакта RW или null, если не найден.
+	 */
 	public function getCurrentContactId( $user, $mainContact='' ) {
 		if (!$mainContact) {
 			// Определеяем, какие каналы коммуникации разрешил пользователь
@@ -420,12 +649,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Отправка кода подтверждения всего кроме контакта
+	 * AJAX: запрос кода подтверждения для контакта по полю POST `contactId`.
+	 *
+	 * @return void Ответ через {@see wp_send_json_success()} / {@see wp_send_json_error()}.
 	 */
 	public function send_confirm_code() {
-		/* check_ajax_referer( 'rigtway-nonce', 'nonce_code' ); */
-		// или так
-		/* if( ! wp_verify_nonce( $_POST['nonce_code'], 'rigtway-nonce' ) ) die( 'Stop!'); */		
+		$this->verify_rightway_ajax_nonce();
 		try {
 			$this->rightWayAPI->sendConfirmationCode($_POST['contactId']);
 			Plugin::get()->log( 'Код отправлен на contactId='+$_POST['contactId'] );
@@ -437,10 +666,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Отправка кода подтверждения контакта
+	 * AJAX: отправка кода подтверждения на значение контакта (телефон/email).
+	 *
+	 * @return void
 	 */
-
 	public function send_confirm_contact_code() {	
+		$this->verify_rightway_ajax_nonce();
 		try {
 			$result = $this->rightWayAPI->sendContactConfirmationCode($_POST['contactValue']);
 			wp_send_json_success($result); // ВРЕМЕННО ДЛЯ ТЕСТИРОВАНИЯ
@@ -451,10 +682,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Получение токена для подтверждения контакта
+	 * AJAX: подтверждение кода и получение токена контакта ({@see RightWay::getToken()}).
 	 *
-	 */	 
+	 * @return void
+	 */
 	public function get_contact_token() {	
+		$this->verify_rightway_ajax_nonce();
 		try {
 			$result = $this->rightWayAPI->getToken($_POST['contactValue'], $_POST['confirmCode']);
 			wp_send_json_success($result);
@@ -464,32 +697,31 @@ class Plugin
 		} 
 	}	
 
-	/**
-	 * Проверка существования контакта на платформе RightWay
-	 * @param object $user Объект пользователя
-	 */
-/*     public function getRwAuth($user = false) {
+	/* Закомментировано: проверка клиента RW по карте.
+	public function getRwAuth($user = false) {
 		if (!$user) {
 			$user = wp_get_current_user();
 		}
-        if ( !empty( $user->roles ) && is_array( $user->roles ) ) {
-            //Запрашиваем данные у платформы RW только в том случае, если пользователь customer
-            if (in_array('customer',$user->roles)) {
+		if ( !empty( $user->roles ) && is_array( $user->roles ) ) {
+			//Запрашиваем данные у платформы RW только в том случае, если пользователь customer
+			if (in_array('customer',$user->roles)) {
 
-                try {
-                    $isRWClient=$this->rightWayAPI->getRWCard($user);
+				try {
+					$isRWClient=$this->rightWayAPI->getRWCard($user);
 					return $isRWClient;
-                } catch (\Exception $e) {
-                    Plugin::get()->log( $e->getMessage() );
-                    return;
-                }
+				} catch (\Exception $e) {
+					Plugin::get()->log( $e->getMessage() );
+					return;
+				}
 
-            }
-        }        
-    } */
+			}
+		}
+	} */
 
 	/**
-	 * Вывод чекбокса использования бонусов и состояния бонусного счета на checkout
+	 * Блок чекбоксов «Списать / начислить бонусы» на checkout (перед кнопкой оформления).
+	 *
+	 * @return void
 	 */
 	public function output_bonuses_checkbox() {
 
@@ -564,11 +796,11 @@ class Plugin
 	}
 
 	/**
-	 * Уменьшение стоимости заказа на количество бонусов
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * Добавляет в корзину WooCommerce fee: списание бонусов и/или скидка по акции из сессии.
+	 *
+	 * @param \WC_Cart $cart Корзина.
+	 * @return void
+	 */
 	public function add_bonuses_discount( $cart ) {
 
 		// ничего не делаем в админке и если не AJAX-запрос
@@ -594,6 +826,12 @@ class Plugin
 
 	}
 
+	/**
+	 * Корректирует итог корзины с учётом отрицательного налога по ненаоблагаемым fee (бонусы).
+	 *
+	 * @param string|float $total Строка или число итога.
+	 * @return string|float
+	 */
 	public function filter_cart_get_total( $total ) {
 		$tax_amount = 0;
 	
@@ -609,6 +847,12 @@ class Plugin
 		return $total;
 	}
 
+	/**
+	 * Пересчёт агрегированных налогов по fee корзины (для согласованности с бонусными скидками).
+	 *
+	 * @param array<string, float> $fee_taxes Входящее значение фильтра (в методе сбрасывается).
+	 * @return array<string, float>
+	 */
 	function filter_cart_get_fee_taxes( $fee_taxes ) {
 		$fee_taxes = array();
 		
@@ -626,6 +870,13 @@ class Plugin
 		return $fee_taxes;
 	}
 
+	/**
+	 * HTML строки fee: для ненаоблагаемых отрицательных fee показывать только сумму без налоговой части.
+	 *
+	 * @param string   $fee_html Разметка по умолчанию.
+	 * @param \stdClass $fee     Объект fee.
+	 * @return string
+	 */
 	public function filter_cart_totals_fee_html( $fee_html, $fee ) {
 		if( ! $fee->taxable && $fee->tax < 0 ) {
 			return wc_price( $fee->total );
@@ -633,6 +884,15 @@ class Plugin
 		return $fee_html;
 	}
 
+	/**
+	 * При создании позиции fee в заказе обнуляет налоги для ненаоблагаемых отрицательных fee.
+	 *
+	 * @param \WC_Order_Item_Fee $item    Позиция fee.
+	 * @param string               $fee_key Ключ fee.
+	 * @param \stdClass             $fee     Источник fee из корзины.
+	 * @param \WC_Order             $order   Заказ.
+	 * @return void
+	 */
 	function alter_checkout_create_order_fee_item( $item, $fee_key, $fee, $order ) {
 		if ( ! $fee->taxable && $fee->tax < 0 ) {
 			$item->set_taxes(['total' => []]);
@@ -641,11 +901,11 @@ class Plugin
 	}
 
 	/**
-	 * Сохраняем выбранные действия с бонусами в сессии Woocommerce
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * Сохраняет в сессию WooCommerce флаги списания/начисления бонусов и служебные поля из POST checkout.
+	 *
+	 * @param string $posted_data Строка query string из {@see 'woocommerce_checkout_update_order_review'}.
+	 * @return void
+	 */
 	public function woocommmerce_set_session( $posted_data ) {
 		Plugin::get()->log( json_encode($posted_data) );
 		parse_str( $posted_data, $output );
@@ -682,12 +942,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-запрос для получения активных бонусов пользователя в RightWay на момент оформления заказа
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: расчёт доступных бонусов и скидок по корзине через {@see RightWay::calculateSale()}.
+	 *
+	 * @return void
+	 */
 	public function get_active_bonuses() {
+		$this->verify_rightway_ajax_nonce();
 		if ( !isset($_POST['billing_phone']) ) {
 			wp_send_json_error('Для доступа к бонусам нужно указать номер телефона.');
 		}
@@ -770,12 +1030,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-запрос для получения скидки по акции без бонусной карты на этапе оформления заказа
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: скидка по акции без карты — {@see RightWay::calculateSaleWithoutCard()}.
+	 *
+	 * @return void
+	 */
 	  public function calculateActionDiscount() {
+		$this->verify_rightway_ajax_nonce();
 		// Подготовка данных для запроса скидки
 		$chequeStr='';
 		foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
@@ -828,11 +1088,11 @@ class Plugin
 	}	
 
 	/**
-	 * Очистка строки от недопустимых символов 
-	 * @param string $inSring	Входная строка
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * Удаляет кавычки из строки для безопасной подстановки в XML чека RW.
+	 *
+	 * @param string $inString Исходная строка.
+	 * @return string
+	 */
 	public function sanitize_string($inString) {
 		$substringsToRemove = ['\'', '"'];
 		$outString = str_replace($substringsToRemove, "", $inString);
@@ -840,18 +1100,19 @@ class Plugin
 	}
 
 	/**
-	 * Списание и/или начисление бонусов после оплаты заказа 
-	 * @param int $order_id	Идентификатор заказа
-	 * @since    1.0.0
-	 * 
- 	 */	
+	 * После оплаты заказа: отправка чека в RW через {@see RightWay::applyPurchase()} при наличии метаданных расчёта.
+	 *
+	 * @param int $order_id ID заказа WooCommerce.
+	 * @return void
+	 */
 	public function process_bonuses_after_order_payment($order_id){
 		$order = wc_get_order( $order_id );
 		$order_items           = $order->get_items();
 		foreach ( $order_items as $item_id => $item ) {
 		}
-		if ( ! empty( $_POST['rw_card_number'] ) )
-        update_post_meta( $order_id, 'rw_card_number', sanitize_text_field( $_POST['rw_card_number'] ) );
+		if ( ! empty( $_POST['rw_card_number'] ) ) {
+			update_post_meta( $order_id, 'rw_card_number', sanitize_text_field( $_POST['rw_card_number'] ) );
+		}
 
 		$rw_card_operation = get_post_meta($order_id, 'rw_card_operation', true);
 		$rw_doc_number = get_post_meta($order_id, 'rw_doc_number', true);
@@ -879,12 +1140,12 @@ class Plugin
 		}
 	}
 
-/**
-	 * Запрос на подготовку возврата заказа 
-	 * @param int $order_id	Идентификатор заказа
-	 * @since    1.0.0
-	 * 
- 	 */	
+	/**
+	 * Возврат/отмена заказа: {@see RightWay::calculateReturn()} и {@see RightWay::applyReturn()} по метаданным заказа.
+	 *
+	 * @param int $order_id ID заказа WooCommerce.
+	 * @return void
+	 */
 	  public function process_bonuses_after_order_return($order_id){
 		$order = wc_get_order( $order_id );
 		$order_items           = $order->get_items();
@@ -939,9 +1200,10 @@ class Plugin
 	}	
 
 	/**
-	 * Add a new settings tab to woocommerce/settings
+	 * Вкладка настроек WooCommerce «Программа лояльности».
 	 *
-	 * @since    1.0.0
+	 * @param array<string, string> $settings_tabs Вкладки настроек WC.
+	 * @return array<string, string>
 	 */
 	public function add_settings_tab( $settings_tabs ) {
 		$settings_tabs['wc_rightway'] = _x( 'Программа лояльности', 'WooCommerce Settings Tab', RIGTWAY );
@@ -949,22 +1211,19 @@ class Plugin
 	}
 
 	/**
-	 * Output settings fields on settings tab
-	 * 
-	 * @since    1.0.0
-	 * @access  public
+	 * Вывод полей вкладки настроек RW в админке WooCommerce.
+	 *
+	 * @return void
 	 */
-	public  function settings_tab() {
+	public function settings_tab() {
 		//echo \WC_Admin_Settings::get_option('wc_rightway_api_key');
 		woocommerce_admin_fields( self::get_settings() ); 
 	}
 	
 	/**
-	 * Define the settings for this plugin
+	 * Определение полей настроек для {@see woocommerce_admin_fields()}.
 	 *
-	 * @since    1.0.0
-	 * @access  public
-	 * @filters wc_righway
+	 * @return array<string, array<string, mixed>> Структура настроек WC.
 	 */
 	public function get_settings() {
 
@@ -1048,18 +1307,18 @@ class Plugin
 	}
 
 	/**
-	 * Update settings for this plugin
-	 * 
-	 * @since    1.0.0
+	 * Сохранение опций вкладки RW при сабмите настроек WooCommerce.
+	 *
+	 * @return void
 	 */
 	public function update_settings() {
 		woocommerce_update_options( self::get_settings() );
 	}
 
 	/**
-	 * Проверка соответствия данных пользователя на сайте данным пользователя в RightWay
-	 * 
-	 * @since    1.0.0
+	 * Дашборд ЛК: сверка billing-данных с {@see RightWay::getCardSummary()}, предупреждения при расхождении.
+	 *
+	 * @return void
 	 */
 	public function check_customer_data() {
 		$user = wp_get_current_user();
@@ -1079,6 +1338,7 @@ class Plugin
 					PLUGIN::get()->log($cardSummaryArray);
 					/* $customerRWInfo = $this->rightWayAPI->getCustomerContacts($customerId); */
 					$notMatch = false;
+					$billing_email_rw = trim( (string) get_user_meta( $user->ID, 'billing_email', true ) );
 					foreach( $cardSummaryArray['contacts'] as $customerContact ) {
 						$billing_phone = get_user_meta( $user->ID, 'billing_phone', true );
 						if (!preg_match('/^\+7\d{10}$/', $billing_phone)) {
@@ -1093,10 +1353,10 @@ class Plugin
 							$notMatch = true;
 							break;
 						}
-						if (strpos($customerContact['value'], '@') !== false && $customerContact['value'] !== $user->user_email) {
+						if (strpos($customerContact['value'], '@') !== false && $customerContact['value'] !== $billing_email_rw) {
 							ob_start();
 							var_dump($customerContact['value']);
-							var_dump($user->user_email);
+							var_dump($billing_email_rw);
 							$mismatchedData = ob_get_clean();
 							$contactId = $customerContact['id'];
 							$notMatch = true;
@@ -1148,12 +1408,10 @@ class Plugin
 	}	
 
 	/**
-	 * Добавление в меню Личного кабинета ссылки на раздел бонусов
-	 * 
-	 * @since    1.0.0
-	 * @param array $menu_links	Массив ссылок
-	 * @return array $menu_links Обновленный массив ссылок
-	 * 
+	 * Добавляет пункт «Мои бонусы» в меню личного кабинета при наличии customerId в мета.
+	 *
+	 * @param array<string, string> $menu_links Пункты меню WC.
+	 * @return array<string, string>
 	 */
 	public function bonuses_link( $menu_links ){
 		/* $menu_links[ 'my-bonuses' ] = 'Мои бонусы'; */
@@ -1169,10 +1427,9 @@ class Plugin
 	}
 
 	/**
-	 * Добавление эндпоинта для страницы "Мои бонусы" Личного кабинета
-	 * 
-	 * @since    1.0.0
-	 * 
+	 * Регистрация rewrite-эндпоинта {@see 'my-bonuses'} для страницы бонусов в ЛК.
+	 *
+	 * @return void
 	 */
 	public function my_bonuses_add_endpoint() {
 	 
@@ -1180,6 +1437,11 @@ class Plugin
 	 
 	}
 	 
+	/**
+	 * Контент вкладки «Мои бонусы»: таблица пакетов из {@see RightWay::getCustomerRWBonuses()}.
+	 *
+	 * @return void
+	 */
 	public function my_bonuses_content() {
 		$user = wp_get_current_user();
 		$cardId = get_user_meta( $user->ID, 'cardId', true );
@@ -1240,12 +1502,10 @@ class Plugin
 	}
 
 	/**
-	 * Добавление в меню Личного кабинета ссылки на раздел настроек
-	 * 
-	 * @since    1.0.0
-	 * @param array $menu_links	Массив ссылок
-	 * @return array $menu_links Обновленный массив ссылок
-	 * 
+	 * Добавляет пункт «Настройки» (communication-options) в меню ЛК.
+	 *
+	 * @param array<string, string> $menu_links Пункты меню WC.
+	 * @return array<string, string>
 	 */
 	public function options_link( $menu_links ){
 		/* $menu_links[ 'communication-options' ] = 'Настройки'; */
@@ -1260,10 +1520,9 @@ class Plugin
 	}
 
 	/**
-	 * Добавление эндпоинта для страницы "Настройки" Личного кабинета
-	 * 
-	 * @since    1.0.0
-	 * 
+	 * Регистрация rewrite-эндпоинта {@see 'communication-options'}.
+	 *
+	 * @return void
 	 */
 	public function communication_options_add_endpoint() {
 	 
@@ -1273,10 +1532,9 @@ class Plugin
 	 
 
 	/**
-	 * Вывод содержимого страницы "Настройки" Личного кабинета
-	 * 
-	 * @since    1.0.0
-	 * 
+	 * Форма настроек каналов коммуникации и маркетинга (user meta + POST).
+	 *
+	 * @return void
 	 */
 	public function communication_options_content() {
 		$user = wp_get_current_user();
@@ -1288,6 +1546,7 @@ class Plugin
 		}
 		$allowEmail = get_user_meta( $user_id, 'allowEmail', true );
 		$allowSms = get_user_meta( $user_id, 'allowSms', true );
+		$allowMarketingCommunication = get_user_meta( $user_id, 'allowMarketingCommunication', true );
 		if (!$allowEmail && !$allowSms) {
 			$allowSms = true;
 		}
@@ -1297,21 +1556,21 @@ class Plugin
 		<p><?php _e( 'Каналы коммуникации (для отправки кода подтверждения при операциях с бонусами):', RIGHTWAY); ?></p>
 		<div class="communication-item">
 			<label class="checkbox_button checkbox">
-				<input type="checkbox" class="input-checkbox " name="allowSms" id="allowSms" value="1" checked="<?php echo $allowSms; ?>">
+				<input type="checkbox" class="input-checkbox " name="allowSms" id="allowSms" value="1" <?php checked( $allowSms, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
 				<div class="title"><?php _e( 'SMS', RIGHTWAY); ?></div>
 			</label>
 		</div>
 		<div class="communication-item">
 			<label class="checkbox_button checkbox">
-				<input type="checkbox" class="input-checkbox " name="allowEmail" id="allowEmail" value="1" checked="<?php echo $allowEmail; ?>">
+				<input type="checkbox" class="input-checkbox " name="allowEmail" id="allowEmail" value="1" <?php checked( $allowEmail, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
 				<div class="title"><?php _e( 'Email', RIGHTWAY); ?></div>
 			</label>
 		</div>
 		<div class="communication-item">	
 			<label class="checkbox_button checkbox">
-				<input type="checkbox" class="input-checkbox " name="allowMarketingCommunication" id="allowMarketingCommunication" value="1" checked="<?php echo $allowMarketingCommunication; ?>">
+				<input type="checkbox" class="input-checkbox " name="allowMarketingCommunication" id="allowMarketingCommunication" value="1" <?php checked( $allowMarketingCommunication, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
 				<div class="title"><?php _e( 'Разрешение на маркетинговые коммуникации', RIGHTWAY); ?></div>
 			</label>
@@ -1374,37 +1633,68 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Отправка настроек коммуникации пользователя в RightWay при изменении их в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: синхронизация флагов коммуникаций с RW по карте текущего пользователя ({@see RightWay::updateCommunicationData()}); идентификатор карты — мета `cardId`.
+	 *
+	 * @return void
+	 */
 	public function edit_RW_communiction_data() {
-		$cardId = $_POST['cardId'];
-
-		$confirmCode = (isset($_POST['confirmCode']))?$_POST['confirmCode']:'';
-		if (!$confirmCode) {
-			wp_send_json_error('Отсутствует код подтверждения');
+		$this->verify_rightway_ajax_nonce();
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			wp_send_json_error( 'Требуется авторизация.' );
+		}
+		$cardId = get_user_meta( $user_id, 'cardId', true );
+		if ( ! $cardId ) {
+			wp_send_json_error( 'У учётной записи не указана карта лояльности.' );
 		}
 
-		/* $current_url = home_url(add_query_arg(array(),$wp->request));
-		$billing = home_url('/account/edit-address/billing'); */
+		$new_sms       = ( isset( $_POST['allowSms'] ) && 'true' === $_POST['allowSms'] );
+		$new_email     = ( isset( $_POST['allowEmail'] ) && 'true' === $_POST['allowEmail'] );
+		$new_marketing = ( isset( $_POST['allowMarketingCommunication'] ) && 'true' === $_POST['allowMarketingCommunication'] );
+		$confirm_code  = isset( $_POST['confirmCode'] ) ? sanitize_text_field( wp_unslash( $_POST['confirmCode'] ) ) : '';
 
-
-
-		// Подготавливаем данные по коммуникации в RW
-		Plugin::get()->log( 'allowSms='.$_POST['allowSms'] );
-		Plugin::get()->log( 'allowEmail='.$_POST['allowEmail'] );
-		Plugin::get()->log( 'allowMarketingCommunication='.$_POST['allowMarketingCommunication'] );
-		$communicationData = array (
-			'allowSms' 						=> ($_POST['allowSms'] == 'true')?true:false,
-			'allowEmail' 					=> ($_POST['allowEmail'] == 'true')?true:false,
-			'allowMarketingCommunication' 	=> ($_POST['allowMarketingCommunication'] == 'true')?true:false,
-			'confirmationCode' 				=> $confirmCode
-		);
-
-		// Обновляем данные по коммуникации в RW
 		try {
+			$summaryBody = $this->rightWayAPI->getCardSummary( $cardId );
+			$summaryArr  = json_decode( $summaryBody, true );
+			$rw_com      = ( is_array( $summaryArr ) && isset( $summaryArr['communicationSettings'] ) && is_array( $summaryArr['communicationSettings'] ) )
+				? $summaryArr['communicationSettings']
+				: array();
+
+			$rw_sms_on       = $this->rw_communication_flag_is_on( $rw_com['allowSms'] ?? false );
+			$rw_email_on     = $this->rw_communication_flag_is_on( $rw_com['allowEmail'] ?? false );
+			$rw_marketing_on = $this->rw_communication_flag_is_on( $rw_com['allowMarketingCommunication'] ?? false );
+			$has_rw_changes  = ( $new_sms !== $rw_sms_on ) || ( $new_email !== $rw_email_on ) || ( $new_marketing !== $rw_marketing_on );
+
+			if ( $has_rw_changes && '' === $confirm_code ) {
+				wp_send_json_error( 'Отсутствует код подтверждения' );
+			}
+
+			Plugin::get()->log( 'allowSms=' . ( $new_sms ? 'true' : 'false' ) );
+			Plugin::get()->log( 'allowEmail=' . ( $new_email ? 'true' : 'false' ) );
+			Plugin::get()->log( 'allowMarketingCommunication=' . ( $new_marketing ? 'true' : 'false' ) );
+
+			$communicationData = array(
+				'allowSms'                      => $new_sms,
+				'allowEmail'                    => $new_email,
+				'allowMarketingCommunication'   => $new_marketing,
+			);
+			if ( $has_rw_changes ) {
+				$communicationData['confirmationCode'] = $confirm_code;
+			}
+
+			$has_email   = false;
+			if ( is_array( $summaryArr ) && ! empty( $summaryArr['contacts'] ) && is_array( $summaryArr['contacts'] ) ) {
+				foreach ( $summaryArr['contacts'] as $c ) {
+					if ( ! empty( $c['value'] ) && false !== strpos( $c['value'], '@' ) ) {
+						$has_email = true;
+						break;
+					}
+				}
+			}
+			if ( ! empty( $communicationData['allowEmail'] ) && ! $has_email ) {
+				Plugin::get()->log( 'allowEmail сброшен: у карты в RW нет email-контакта.' );
+				$communicationData['allowEmail'] = false;
+			}
 			$this->rightWayAPI->updateCommunicationData($communicationData, $cardId);
 			wp_send_json_success('RW Custom Data are updated successfully.');
 		}	catch (\Exception $e) {
@@ -1414,14 +1704,20 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Добавление контакта пользователю в RightWay
-	 * 
-	 * @since    1.0.0
-	 * @param string $contactType Тип контакта - телефон или Email
-	 * 
- 	 */
+	 * AJAX: добавление контакта покупателю ({@see RightWay::createContactData()}).
+	 *
+	 * @return void
+	 */
 	  public function create_RW_contact_data() {
-		/* if( ! wp_verify_nonce( $_POST['nonce_code'], 'rigtway-nonce' ) ) die( 'Stop!'); */
+		$this->verify_rightway_ajax_nonce();
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			wp_send_json_error( 'Требуется авторизация.' );
+		}
+		$customer_id = get_user_meta( $user_id, 'customerId', true );
+		if ( ! $customer_id ) {
+			wp_send_json_error( 'У учётной записи не привязан покупатель RightWay.' );
+		}
 
 		// Подготавливаем данные контакта в RW
 		$contactValue = isset($_POST['value'])?str_replace(array(' ', '(' , ')', '-'), '', $_POST['value']):'';
@@ -1430,7 +1726,8 @@ class Plugin
 		);
 
 		try {
-			$this->rightWayAPI->createContactData($contactData, $_POST['customerId'], $_POST['token']);
+			$this->rightWayAPI->createContactData($contactData, $customer_id, $_POST['token']);
+			wp_send_json_success( true );
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
 			wp_send_json_error($e->getMessage(), 500);
@@ -1438,68 +1735,77 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Отправка контактов пользователя в RightWay при изменении их в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * @param string $contactType Тип контакта - телефон или Email
-	 * 
- 	 */
+	 * AJAX: обновление телефона и email контактов в RW из POST billing.
+	 * Идентификатор покупателя RW берётся из user meta; contactId сверяется со списком контактов RW.
+	 *
+	 * @param mixed $contactType Зарезервировано; при вызове через {@see add_action()} может передаваться служебный аргумент WP.
+	 * @return void
+	 */
 	public function edit_RW_contact_data($contactType) {
-		/* if( ! wp_verify_nonce( $_POST['nonce_code'], 'rigtway-nonce' ) ) die( 'Stop!'); */
+		$this->verify_rightway_ajax_nonce();
 
-		/* $current_url = home_url(add_query_arg(array(),$wp->request));
-		$billing = home_url('/account/edit-address/billing'); */
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			wp_send_json_error( 'Требуется авторизация.' );
+		}
+		$customer_id = get_user_meta( $user_id, 'customerId', true );
+		if ( ! $customer_id ) {
+			wp_send_json_error( 'У учётной записи не привязан покупатель RightWay.' );
+		}
+		if ( ! isset( $_POST['contactId'] ) || '' === (string) $_POST['contactId'] ) {
+			wp_send_json_error( 'Не указан идентификатор контакта.' );
+		}
+		$contact_id = sanitize_text_field( wp_unslash( $_POST['contactId'] ) );
 
-		$user = wp_get_current_user();
 		try {
-			$customerRWInfo = $this->rightWayAPI->getCustomerInfo($user)[0];
-			Plugin::get()->log( json_encode($customerRWInfo,JSON_UNESCAPED_UNICODE) );
-		} catch (\Exception $e) {
+			$this->assert_rw_contact_belongs_to_customer( $contact_id, $customer_id );
+		} catch ( \Exception $e ) {
 			Plugin::get()->log( $e->getMessage() );
-			wp_send_json_error($e->getMessage(), 500);
+			wp_send_json_error( $e->getMessage(), 500 );
 		}
 
-		// Подготавливаем данные контакта в RW
-		$contactPhone = isset($_POST['billing_phone'])?str_replace(array(' ', '(' , ')', '-'), '', $_POST['billing_phone']):'';
-		$contactData = array(
-			"value" => $contactPhone
-		);
+		$contactPhone = isset( $_POST['billing_phone'] ) ? str_replace( array( ' ', '(', ')', '-' ), '', wp_unslash( $_POST['billing_phone'] ) ) : '';
+		$updated      = false;
 
-		if ($contactPhone) {
+		if ( $contactPhone ) {
 			try {
-				// Получаем id контакта, в котором записан телефон, и обновляем номер телефона
-				$this->rightWayAPI->updateContactData($contactData, $_POST['contactId'], $_POST['customerId']);
-			}	catch (\Exception $e) {
+				$contactData = array( 'value' => $contactPhone );
+				$this->rightWayAPI->updateContactData( $contactData, $contact_id, $customer_id );
+				$updated = true;
+			} catch ( \Exception $e ) {
 				Plugin::get()->log( $e->getMessage() );
-				wp_send_json_error($e->getMessage(), 500);
+				wp_send_json_error( $e->getMessage(), 500 );
 			}
 		}
 
-		$contactEmail = isset($_POST['email'])?str_replace(array(' ', '(' , ')', '-'), '', $_POST['email']):'';
-		$contactData = array(
-			"value" => $contactEmail
-		);
+		$contactEmail = isset( $_POST['email'] ) ? str_replace( array( ' ', '(', ')', '-' ), '', wp_unslash( $_POST['email'] ) ) : '';
 
-		if ($contactEmail) {
+		if ( $contactEmail ) {
 			try {
-				$this->rightWayAPI->updateContactData($contactData, $_POST['contactId'], $_POST['customerId']);
-			}	catch (\Exception $e) {
+				$contactData = array( 'value' => $contactEmail );
+				$this->rightWayAPI->updateContactData( $contactData, $contact_id, $customer_id );
+				$updated = true;
+			} catch ( \Exception $e ) {
 				Plugin::get()->log( $e->getMessage() );
-				wp_send_json_error($e->getMessage(), 500);
+				wp_send_json_error( $e->getMessage(), 500 );
 			}
-		}		
+		}
+
+		if ( ! $updated ) {
+			wp_send_json_error( 'Не указаны телефон или email для обновления.', 400 );
+		}
+		wp_send_json_success( true );
 	}
 
 
 
 	/**
-	 * ajax-Отправка данных пользователя в RightWay при изменении их в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: обновление анкеты покупателя в RW ({@see RightWay::updateCustomerData()}).
+	 *
+	 * @return void
+	 */
 	public function edit_RW_customer_data() {
-		/* if( ! wp_verify_nonce( $_POST['nonce_code'], 'rigtway-nonce' ) ) die( 'Stop!'); */
+		$this->verify_rightway_ajax_nonce();
 		
 		$user = wp_get_current_user();
 
@@ -1528,11 +1834,11 @@ class Plugin
 	}
 
 	/**
-	 * Вывод дополнительных полей для работы с платформой лояльности RightWay на страницу /my-account/edit-address/billing/ в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * Поля даты рождения и пола на форме billing-адреса в ЛК.
+	 *
+	 * @param array<string, mixed> $fields Поля WC (не используются).
+	 * @return void
+	 */
 	public function add_custom_user_fields($fields) {
 		$user_id = get_current_user_id();
 		echo '<div class="cabinet_data-form">';
@@ -1568,13 +1874,12 @@ class Plugin
 	}
 
 	/**
-	 * Сохранение доп. данных пользователя после редактирования на станице /my-account/edit-address/billing/ в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * @param int 		$user_id		Идентификатор пользователя на сайте
-	 * @param string 	$load_address	редактируемая группа полей
-	 * 
- 	 */
+	 * Сохранение birthDate, gender, customerId, cardId, cardNumber при сохранении billing-адреса.
+	 *
+	 * @param int    $user_id       ID пользователя.
+	 * @param string $load_address  Группа адреса WC (`billing` / `shipping`).
+	 * @return void
+	 */
 	public function save_custom_user_fields($user_id, $load_address) {
 		if ('billing' !== $load_address) {
 			return;
@@ -1597,12 +1902,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Отправка настроек коммуникации пользователя в RightWay при изменении их в Личном кабинете
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: JSON summary карты текущего пользователя ({@see RightWay::getCardSummary()}).
+	 *
+	 * @return void
+	 */
 	public function get_card_summary() {	
+		$this->verify_rightway_ajax_nonce();
 		$user = wp_get_current_user();
 		$cardId = get_user_meta( $user->ID, 'cardId', true );
 		$cardNumber = get_user_meta( $user->ID, 'cardNumber', true );
@@ -1623,13 +1928,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Получение контактов покупателя в базе RW
-	 * @param string $customerId Идентификатор покупателя в RW
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: список контактов покупателя RW по полю POST `customerId`.
+	 *
+	 * @return void
+	 */
 	public function get_customer_contacts() {
+		$this->verify_rightway_ajax_nonce();
 		if (!isset($_POST['customerId'])) {
 			wp_send_json_error('Не указан идентификатор пользователя!');
 		}
@@ -1644,12 +1948,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Получение количества покупателей с одинаковым номером телефона в базе RW (для проверки на уникальность)
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: число записей покупателей RW с тем же телефоном или email (проверка уникальности).
+	 *
+	 * @return void
+	 */
 	public function get_RW_customers_quantity() {
+		$this->verify_rightway_ajax_nonce();
 		if ( !isset($_POST['phone']) && !isset($_POST['email']) ) {
 			wp_send_json_error('Не указан контакт!');
 		}
@@ -1677,11 +1981,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Получение покупателей с указанным номером телефона в базе RW 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: поиск покупателей/карт в RW по телефону или email; при нескольких картах — логика merge.
+	 *
+	 * @return void
+	 */
 	  public function get_RW_customers() {
+		$this->verify_rightway_ajax_nonce();
 		if ( !isset($_POST['phone']) && !isset($_POST['email']) ) {
 			wp_send_json_error('Не указан контакт!');
 		}
@@ -1714,6 +2019,7 @@ class Plugin
 						Plugin::get()->log( $cardsArray );
 
 						if (count($cardsArray)) {
+							$cardsToMerge = array();
 							//Выбираем карту с наибольшим номером и все остальные незаблокированные объединяем с выбранной
 							$maxCardId = $cardsArray['0']['id'];
 							foreach ($cardsArray as $key => $card) {
@@ -1738,31 +2044,36 @@ class Plugin
 							// Если нет незаблокированных карт для объединения, возвращаем данные пользователя активной карты
 							if (count($cardsToMerge) == 0) {
 								Plugin::get()->log( "Нет незаблокированных карт для объединения" );
-								wp_send_json_success(array($customerArray));
+								$out = array( $customerArray );
+								Plugin::get()->log( '[rightway_get_customers] outgoing JSON (phone, merge branch, cardsToMerge empty): ' . wp_json_encode( $out, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR ) );
+								wp_send_json_success( $out );
 							}
 
-						}
-
-						Plugin::get()->log( "Незаблокированные карты с контактом ".$_POST['phone'].":" );
-						Plugin::get()->log( $cardsArray );
-						Plugin::get()->log( "Карты, которые нужно объединить: " );
-						Plugin::get()->log( $cardsToMerge );
-						if (!isset($_POST['rwToken']) || !$_POST['rwToken']){
-							wp_send_json_error('Не получен токен для выполнения объединения карт');
-						}
-						$cardsData = array (
-							"resultCardId"=> $maxCardId,
-							"mergeCardsIds"=> $cardsToMerge,
-							"tokens" => array($_POST['rwToken'])
-						);
-						Plugin::get()->log( "body запроса на объединение: " );
-						Plugin::get()->log( $cardsData );
-						try {
-							$this->rightWayAPI->mergeCards($cardsData);
-							wp_send_json_success(array($customerArray));
-						} catch (\Exception $e) {
+							Plugin::get()->log( "Незаблокированные карты с контактом ".$_POST['phone'].":" );
+							Plugin::get()->log( $cardsArray );
+							Plugin::get()->log( "Карты, которые нужно объединить: " );
+							Plugin::get()->log( $cardsToMerge );
+							if (!isset($_POST['rwToken']) || !$_POST['rwToken']){
+								wp_send_json_error('Не получен токен для выполнения объединения карт');
+							}
+							$cardsData = array (
+								"resultCardId"=> $maxCardId,
+								"mergeCardsIds"=> $cardsToMerge,
+								"tokens" => array($_POST['rwToken'])
+							);
+							Plugin::get()->log( "body запроса на объединение: " );
+							Plugin::get()->log( $cardsData );
+							try {
+								$this->rightWayAPI->mergeCards($cardsData);
+								$out = array( $customerArray );
+								Plugin::get()->log( '[rightway_get_customers] outgoing JSON (phone, after mergeCards): ' . wp_json_encode( $out, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR ) );
+								wp_send_json_success( $out );
+							} catch (\Exception $e) {
 								Plugin::get()->log( $e->getMessage() );
 								wp_send_json_error($e->getMessage());
+							}
+						} else {
+							Plugin::get()->log( 'Несколько покупателей с телефоном '.$_POST['phone'].', незаблокированных карт нет — ответ списком покупателей' );
 						}
 					} catch (\Exception $e) {
 						Plugin::get()->log( $e->getMessage() );
@@ -1770,6 +2081,7 @@ class Plugin
 					}
 				}
 
+				Plugin::get()->log( '[rightway_get_customers] outgoing JSON (phone, default branch): ' . wp_json_encode( $customersArray, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR ) );
 				wp_send_json_success($customersArray);
 			}	catch (\Exception $e) {
 				Plugin::get()->log( $e->getMessage() );
@@ -1780,6 +2092,7 @@ class Plugin
 		if ( isset($_POST['email']) ) {
 			try {
 				$customersArray = $this->rightWayAPI->getCustomersByEmail($_POST['email']);
+				Plugin::get()->log( '[rightway_get_customers] outgoing JSON (email): ' . wp_json_encode( $customersArray, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR ) );
 				wp_send_json_success($customersArray);
 			}	catch (\Exception $e) {
 				Plugin::get()->log( $e->getMessage() );
@@ -1790,11 +2103,12 @@ class Plugin
 	}
 
 	/**
-	 * ajax-Получение данных карты из базы RW 
-	 * @since    1.0.0
-	 * 
- 	 */
+	 * AJAX: JSON карт покупателя по полю POST `customerId` ({@see RightWay::getCustomerCardData()}).
+	 *
+	 * @return void
+	 */
 	  public function get_RW_customer_cards() {
+		$this->verify_rightway_ajax_nonce();
 		if ( !isset($_POST['customerId']) && !$_POST['customerId']) {
 			wp_send_json_error('Не указан customerId!');
 		}
@@ -1810,12 +2124,12 @@ class Plugin
 	}	
 
 	/**
-	 * ajax-Регистрация покупателя в RW и создание бонусной карты 
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */	
+	 * AJAX: регистрация в RW и создание карты ({@see RightWay::registerRWClient()}, {@see RightWay::createRWCard()}).
+	 *
+	 * @return void
+	 */
 	public function create_RW_customer() {
+		$this->verify_rightway_ajax_nonce();
 		Plugin::get()->log( json_encode($_POST ));
 		if ( !isset($_POST['contact']) && !isset($_POST['value'] ) ) {
 			wp_send_json_error('Не указан телефон или email!');
@@ -1875,11 +2189,10 @@ class Plugin
 	}
 	
 	/**
-	 * Добавление скрытого поля для номером документа заказа, получаемого методом calculateSale 
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */	
+	 * Скрытые поля checkout для номера карты, документа RW, операции, бонусов и XML-чека.
+	 *
+	 * @return void
+	 */
 	public function add_checkout_hidden_field(){
 		echo '<div id="rw_doc_number_hidden_checkout_field">
 		<input type="hidden" class="input-hidden" name="rw_card_number" id="rw_card_number" value="">
@@ -1892,28 +2205,33 @@ class Plugin
 	}
 
 	/**
-	 * Сохранение скрытого поля для номером документа заказа, получаемого методом calculateSale 
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */	
+	 * Сохранение скрытых полей RW в метаданные заказа при оформлении.
+	 *
+	 * @param int $order_id ID заказа.
+	 * @return void
+	 */
 	  public function save_custom_checkout_hidden_field($order_id){
-		if ( ! empty( $_POST['rw_card_number'] ) )
-        update_post_meta( $order_id, 'rw_card_number', sanitize_text_field( $_POST['rw_card_number'] ) );
-		if ( ! empty( $_POST['rw_doc_number'] ) )
-        update_post_meta( $order_id, 'rw_doc_number', sanitize_text_field( $_POST['rw_doc_number'] ) );
-		if ( ! empty( $_POST['rw_card_operation'] ) )
-        update_post_meta( $order_id, 'rw_card_operation', sanitize_text_field( $_POST['rw_card_operation'] ) );
-		if ( ! empty( $_POST['rw_cheque'] ) )
-        update_post_meta( $order_id, 'rw_cheque', ( $_POST['rw_cheque'] ) );
+		if ( ! empty( $_POST['rw_card_number'] ) ) {
+			update_post_meta( $order_id, 'rw_card_number', sanitize_text_field( $_POST['rw_card_number'] ) );
+		}
+		if ( ! empty( $_POST['rw_doc_number'] ) ) {
+			update_post_meta( $order_id, 'rw_doc_number', sanitize_text_field( $_POST['rw_doc_number'] ) );
+		}
+		if ( ! empty( $_POST['rw_card_operation'] ) ) {
+			update_post_meta( $order_id, 'rw_card_operation', sanitize_text_field( $_POST['rw_card_operation'] ) );
+		}
+		if ( ! empty( $_POST['rw_cheque'] ) ) {
+			update_post_meta( $order_id, 'rw_cheque', ( $_POST['rw_cheque'] ) );
+		}
 	}
 
 	/**
-	 * Сохранение скрытых поля для работы с RW в профиле пользователя 
-	 * 
-	 * @since    1.0.0
-	 * 
- 	 */	
+	 * При создании учётной записи на checkout: сохранение customerId, cardId, cardNumber из POST.
+	 *
+	 * @param int   $customer_id ID нового пользователя.
+	 * @param array $posted      Данные формы checkout.
+	 * @return void
+	 */
 	public function save_custom_user_hidden_field($customer_id, $posted){
 		Plugin::get()->log( json_encode($posted) );
 		if (!isset($posted['createaccount'])) {
@@ -1931,7 +2249,9 @@ class Plugin
 	}
 
 	/**
-	 * Добавление скрытого шаблона модального окна в footer для страниц личного кабинета
+	 * Разметка модального окна ввода кода подтверждения в подвале страниц ЛК.
+	 *
+	 * @return void
 	 */
 	public function add_confirm_modal_template() {
 		// Проверяем, что это страница личного кабинета WooCommerce

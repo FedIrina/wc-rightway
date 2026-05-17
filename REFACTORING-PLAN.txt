@@ -1,0 +1,89 @@
+RightWay plugin — план рефакторинга JS (сверка)
+Обновлено: 2026-05-17
+
+================================================================================
+СДЕЛАНО
+================================================================================
+
+[+] OTP: RightwayOtp (rightway-otp-state.js)
+[+] Модалка кода: RightwayConfirmModal (rightway-confirm-modal.js)
+[+] Общий разбор неверного кода: RightwayConfirmCode.handleWrongConfirmCode
+[+] API 1.1: sendCode, sendContactCode, getRwToken → rightway-api.js
+[+] API 1.2: getCardSummary, getCustomerContacts, getCustomersContacts,
+    getRwCustomerCards, getCustomersQuantity (не вызывается) → rightway-api.js
+[+] API 1.3: editCommunicationData, editContactData, createCustomer,
+    createContact, editCustomerData → rightway-api.js
+[+] Сценарии: прямых rightwayAjaxPost нет, только API.*
+[+] rwPostOrReject + rightwayAjaxPost (обёртка rwPostResponse удалена)
+[+] Модалка: нельзя закрыть крестиком/фоном во время OTP verifying
+[+] PHP: merge карт при нескольких customer без незаблокированных карт — не требовать rwToken
+[+] Тихий провал: getCustomersContacts при success:false → throw (billing без customerId, checkout)
+[+] rightwayUserErrorMessage + rightwayShowBillingFormError (без префикса "Error:")
+
+================================================================================
+ОТЛОЖЕНО (ждём RW / продукт)
+================================================================================
+
+[ ] Проверка телефона в ЛК перед сменой номера (getCustomersContacts до SMS)
+    — закомментирована в runPhoneVerificationThenPersAndEmail
+    — уточнить у специалистов RW: несколько customer с одним телефоном
+    — после решения: вернуть проверку или изменить UX/тексты
+
+================================================================================
+СЛЕДУЮЩИЕ ШАГИ (рекомендуемый порядок)
+================================================================================
+
+1. Plugin.php
+   [+] Версия скрипта rigtway-js / rigtway-css: $this->version (сброс кэша браузера)
+   [+] Условный wp_enqueue: checkout, communication-options, my-bonuses, edit-address/billing
+
+2. Качество сценариев (мелкие правки)
+   [+] edit-account: обработчик submit убран (WC без RW; email в RW — на billing)
+   [+] getCustomersQuantity удалён из rightway-api.js (PHP action остаётся)
+   [+] Закомментированный дубль runPhoneVerification… убран (проверка отложена в плане)
+   [+] rightwayUserErrorMessage в insertAdjacentHTML с err / data.data (ошибки)
+
+3. Разбиение монолитного rightway.js (файл удалён)
+   [+] rightway-lk-shared.js — getCabinetPersFields, changeRwPersData, ensureRwBillingEmailContact
+   [+] rightway-communication.js
+   [+] rightway-billing.js
+   [+] rightway-checkout-otp.js (CHECKOUT_CREATE_ACCOUNT_OTP_ENABLED = false)
+   [+] Plugin.php: сценарии по странице; my-bonuses — только CSS
+   [+] rightway-account.js — не нужен (edit-account без RW)
+
+4. Крупная задача (отдельно от API-слоя)
+   [ ] Меньше round-trip: один PHP-action «сохранить billing» вместо цепочки 4–6 AJAX
+   [ ] Checkout OTP: включить флаг и прогнать сценарий
+
+================================================================================
+СПРАВКА: КОНТРАКТЫ API (не менять без причины)
+================================================================================
+
+Сырой ответ (rightwayAjaxPost), success проверяет сценарий:
+  - sendCode, sendContactCode
+  - getCardSummary, getCustomerContacts, getCustomersContacts
+
+reject при success:false (rwPostOrReject):
+  - getRwCustomerCards, editCommunicationData, editContactData
+  - createCustomer, createContact, editCustomerData
+
+Особый случай:
+  - getRwToken → resolve строка-токен, reject текст, catch сеть
+
+Ветвление при success:true (только сценарий):
+  - getCustomersContacts: data.length 0 / 1 / >1
+
+================================================================================
+ФАЙЛЫ
+================================================================================
+
+rightway-core.js      — ajax, blockUI, formatPhone, pickFirstActiveRwCard, ошибки UI
+rightway-api.js       — все rightway_* AJAX
+rightway-otp-state.js — FSM OTP
+rightway-confirm-modal.js
+rightway-confirm-code.js
+rightway-lk-shared.js — общее для billing (email, анкета)
+rightway-communication.js, rightway-billing.js, rightway-checkout-otp.js — сценарии ЛК/checkout
+rightway-checkout.js  — бонусы на checkout
+
+================================================================================
