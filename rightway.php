@@ -1,11 +1,10 @@
 <?php
 /**
 * Plugin Name: RightWay
-* Plugin URI: https://ivannikitin-com.github.io/rightway/
+* Plugin URI: https://github.com/FedIrina/wc-rightway
 * Description: Плагин для связи WooCommerce с платформой лояльности RightWay.
 * Version: 1.1.0
-* Author: Иван Никитин и партнеры
-* Author URI: https://ivannikitin.com
+* Author: Ирина Федорова
 * License:     GPL3
 * License URI: https://www.gnu.org/licenses/gpl-3.0.html
 * Text Domain: rightway
