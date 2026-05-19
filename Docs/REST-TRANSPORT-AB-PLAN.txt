@@ -1,0 +1,194 @@
+RightWay plugin — план: REST-транспорт параллельно admin-ajax + A/B
+Обновлено: 2026-05-17
+
+================================================================================
+ЦЕЛЬ
+================================================================================
+
+- Два канала до RW с одинаковой бизнес-логикой и одинаковым JSON-контрактом
+  { success, data }.
+- admin-ajax остаётся по умолчанию.
+- Для заданных тестовых пользователей (или сессии) — переключение на REST для
+  сравнения.
+- Позже можно выбрать победителя без переписывания сценариев (billing, OTP и т.д.).
+
+================================================================================
+ПРИНЦИП СЛОЁВ (куда встраивать)
+================================================================================
+
+Сценарии (billing, communication, checkout-otp, …)
+        ↓
+RightwayApi (rightway-api.js)     ← контракт сценариев не меняется
+        ↓
+Transport (новый слой)            ← ajax | rest
+        ↓
+PHP: единые use case-методы       ← одна реализация для обоих входов
+        ↓
+RightWay API (classes/API.php)
+
+КРИТИЧНО: не дублировать логику в wp_ajax_* и REST-callback по отдельности —
+иначе A/B сравнивает разный код, а не транспорт.
+
+Текущее состояние (исходная точка):
+- rightway-core.js: rightwayFetchJson, rightwayAjaxPost (транспорт)
+- rightway-api.js: доменные методы → rightwayAjaxPost
+- Plugin.php: wp_ajax_* / wp_ajax_nopriv_* (~15 действий)
+- wp_localize_script: ajax_url, nonce_code
+
+================================================================================
+ЭТАП 0. PHP: общий слой обработчиков (подготовка)
+================================================================================
+
+Зачем: сейчас обработчики в Plugin.php; REST должен вызывать те же методы.
+
+Задачи:
+  [ ] Вынести обработку в классы, напр. classes/Http/Actions/
+      SendConfirmCodeAction::run( $request ) → { success, data }
+  [ ] Plugin.php — только add_action( 'wp_ajax_…' ) → тонкая обёртка
+  [ ] Единый Rightway_Response::json( $success, $data )
+  [ ] Входные данные — один формат из $_POST (ajax) и из REST body
+
+Объём: средний; без этого этапа REST будет хрупким.
+
+================================================================================
+ЭТАП 1. REST API (параллельный вход, admin-ajax не трогаем)
+================================================================================
+
+Namespace: rightway/v1
+
+Маппинг admin-ajax → REST (пример):
+
+  rightway_send_confirm_code          POST  /send-confirm-code
+  rightway_send_confirm_contact_code  POST  /send-contact-code
+  rightway_get_contact_token          POST  /contact-token
+  rightway_get_card_summary           GET   /card-summary
+  rightway_get_customer_contacts      GET   /customer-contacts
+  rightway_get_customers              POST  /customers/search
+  rightway_get_customer_cards         GET   /customer-cards
+  rightway_edit_communication_data    POST  /communication
+  rightway_edit_contact_data          POST  /contact
+  rightway_create_customer            POST  /customers
+  rightway_create_contact             POST  /contacts
+  rightway_edit_customer_data         POST  /customer
+  rightway_get_active_bonuses         …     (checkout)
+  rightway_calculateActionDiscount    …     (checkout)
+
+Правила:
+  - register_rest_route на rest_api_init
+  - callback вызывает тот же Action::run(), что и ajax
+  - ответ { "success": true|false, "data": … } — как сейчас
+  - ЛК: permission_callback → is_user_logged_in + nonce wp_rest
+  - checkout (гости): аналог nopriv — отдельный callback, только нужные маршруты
+
+Не удалять: существующие wp_ajax_* / wp_ajax_nopriv_*.
+
+================================================================================
+ЭТАП 2. JS: транспортный слой
+================================================================================
+
+Новый файл: rightway-transport.js (или расширение rightway-core.js)
+
+  rightwayTransportPost( actionOrRoute, fields )
+    → if (rightway.transport === 'rest') rightwayRestPost(…)
+    → else rightwayAjaxPost(…)
+
+rightway-api.js:
+  заменить прямые rightwayAjaxPost на rightwayTransportPost
+  (контракты rwPostOrReject / методов API — без изменений)
+
+REST-вызов:
+  - URL: rightway.rest_url + маршрут (wp_localize_script)
+  - заголовок X-WP-Nonce: rightway.rest_nonce
+  - body: JSON (зафиксировать один формат для REST)
+  - разбор: response.json() → { success, data }
+
+Маппинг action → REST path — одна таблица в JS, не в сценариях.
+
+Plugin.php:
+  подключить rightway-transport.js до rightway-api.js
+
+================================================================================
+ЭТАП 3. A/B для тестового пользователя
+================================================================================
+
+Требования:
+  - один user_id всегда в одной группе (sticky)
+  - ручное переключение для отладки
+  - в логах: транспорт, endpoint, duration_ms, success
+
+Рекомендация для «одного тестового пользователя»:
+  - опция rightway_ab_test_user_ids = [ 123, … ]
+  - опция rightway_ab_transport_for_test_users = rest | ajax
+  - для всех остальных — всегда ajax
+
+Опционально: ?rightway_transport=rest только для administrator (отладка).
+
+wp_localize_script( 'rightway', … ):
+  transport   => ajax | rest
+  ajax_url    => … (как сейчас)
+  nonce_code  => … (ajax)
+  rest_url    => rest_url( 'rightway/v1/' )
+  rest_nonce  => wp_create_nonce( 'wp_rest' )
+  ab_group    => ajax | rest (для логов)
+
+Важно: один сценарий = один транспорт на всю цепочку запросов (не смешивать
+ajax и rest в одном сохранении billing).
+
+================================================================================
+ЭТАП 4. Наблюдаемость A/B
+================================================================================
+
+Минимум:
+  - rightway.log или WP debug: transport, endpoint, duration_ms, success
+  - опционально console.debug при rightway.debug_ab === true
+
+================================================================================
+ЭТАП 5. Порядок внедрения (итерации)
+================================================================================
+
+  1. PHP: общие Action-классы + ajax вызывает их (фронт без изменений)
+  2. REST: 2–3 маршрута (send code, token, card-summary) — тест Postman/curl
+  3. JS: transport + AB только для user_id из настроек → rest
+  4. REST: остальные маршруты ЛК
+  5. A/B логирование, прогон communication + billing
+  6. Документация: обновить REFACTORING-PLAN / CHANGELOG
+
+Не в первой итерации:
+  - удаление admin-ajax
+  - объединение round-trip «один PHP-action billing» (отдельная задача)
+
+================================================================================
+РИСКИ
+================================================================================
+
+1. Разный формат ошибок REST vs ajax → нормализовать в PHP в { success, data }.
+2. nopriv checkout → REST с явным permission_callback + nonce; не открывать все
+   маршруты гостям.
+3. Два nonce: nonce_code (ajax) и wp_rest — не путать в transport.
+4. A/B бессмысленен при дублированной бизнес-логике в ajax и REST handlers.
+
+================================================================================
+ОТКРЫТЫЕ ВОПРОСЫ (для обсуждения)
+================================================================================
+
+1. Scope первой волны: все actions сразу или пилот (OTP + billing ЛК)?
+2. Тестовые пользователи: один user_id или несколько (разные группы)?
+3. Переключение: только опции WP или фильтр rightway_transport_for_user?
+4. Checkout гость: REST в A/B сразу или только залогиненные сценарии сначала?
+5. Метрики: достаточно rightway.log или отчёт в админке?
+
+================================================================================
+ПРЕДЛОЖЕНИЕ ПО УМОЛЧАНИЮ (старт)
+================================================================================
+
+  - Этап 0 + 1: PHP Actions + REST для ЛК (communication, billing, lk-shared)
+  - Этап 2–3: transport + AB для одного user_id из настроек → rest
+  - Checkout (nopriv, bonuses) — оставить на ajax до стабилизации REST в ЛК
+  - После прогона — расширить REST на checkout
+
+================================================================================
+СВЯЗЬ С REFACTORING-PLAN.txt
+================================================================================
+
+Контракты rightway-api.js (см. REFACTORING-PLAN.txt «СПРАВКА: КОНТРАКТЫ API»)
+сохраняются; меняется только слой доставки запроса до PHP.
