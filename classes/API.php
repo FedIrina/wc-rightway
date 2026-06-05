@@ -857,8 +857,13 @@ class RightWay {
                 return json_decode(wp_remote_retrieve_body($response),true);
                 /* break; */
             case 400:
-                throw new \Exception(wp_remote_retrieve_response_code($response).' '.wp_remote_retrieve_response_message($response));
-                break;
+                $body400 = wp_remote_retrieve_body( $response );
+                Plugin::get()->log( 'Тело ответа RW (400), обновление анкеты: ' . $body400 );
+                $user_message = $this->formatRw400ErrorMessage( $body400 );
+                if ( $user_message !== null ) {
+                    throw new \Exception( $user_message );
+                }
+                throw new \Exception( wp_remote_retrieve_response_code( $response ) . ' ' . wp_remote_retrieve_response_message( $response ) );
             case 403:
                 throw new \Exception('Доступ запрещен');
                 break;
@@ -868,6 +873,85 @@ class RightWay {
             default:
                 throw new \Exception(wp_remote_retrieve_response_code($response).' '.wp_remote_retrieve_response_message($response));
         }
+    }
+
+    /**
+     * Сообщение для пользователя из JSON-тела ответа RW при HTTP 400.
+     *
+     * @param string $body Тело ответа.
+     * @return string|null Текст ошибки или null, если разобрать не удалось.
+     */
+    private function formatRw400ErrorMessage( $body ) {
+        if ( $body === '' ) {
+            return null;
+        }
+        $decoded = json_decode( $body, true );
+        if ( ! is_array( $decoded ) ) {
+            return null;
+        }
+        if ( ! empty( $decoded['message'] ) && is_string( $decoded['message'] ) ) {
+            return $this->translateRwApiErrorText( $decoded['message'] );
+        }
+        if ( empty( $decoded['errors'] ) || ! is_array( $decoded['errors'] ) ) {
+            return null;
+        }
+        $parts = array();
+        foreach ( $decoded['errors'] as $field_error ) {
+            if ( ! is_array( $field_error ) ) {
+                continue;
+            }
+            $field_name  = isset( $field_error['fieldName'] ) ? (string) $field_error['fieldName'] : '';
+            $errors_list = ( isset( $field_error['errors'] ) && is_array( $field_error['errors'] ) )
+                ? $field_error['errors']
+                : array();
+            $msgs = array();
+            foreach ( $errors_list as $err_text ) {
+                if ( is_string( $err_text ) && $err_text !== '' ) {
+                    $msgs[] = $this->translateRwApiErrorText( $err_text );
+                }
+            }
+            if ( empty( $msgs ) ) {
+                continue;
+            }
+            $parts[] = $this->getRwCustomerFieldLabel( $field_name ) . ': ' . implode( ' ', $msgs );
+        }
+        if ( empty( $parts ) ) {
+            return null;
+        }
+        return implode( ' ', $parts );
+    }
+
+    /**
+     * @param string $field_name Имя поля в ответе RW.
+     * @return string Подпись поля для сообщения пользователю.
+     */
+    private function getRwCustomerFieldLabel( $field_name ) {
+        $labels = array(
+            'firstName'  => __( 'Имя', RIGHTWAY ),
+            'lastName'   => __( 'Фамилия', RIGHTWAY ),
+            'middleName' => __( 'Отчество', RIGHTWAY ),
+            'birthDate'  => __( 'Дата рождения', RIGHTWAY ),
+            'gender'     => __( 'Пол', RIGHTWAY ),
+        );
+        if ( isset( $labels[ $field_name ] ) ) {
+            return $labels[ $field_name ];
+        }
+        return $field_name !== '' ? $field_name : __( 'Поле анкеты', RIGHTWAY );
+    }
+
+    /**
+     * @param string $text Текст ошибки из RW (англ.).
+     * @return string Сообщение на русском или исходный текст.
+     */
+    private function translateRwApiErrorText( $text ) {
+        $text   = trim( $text );
+        $known  = array(
+            'This value is not valid.' => __( 'указано недопустимое значение. Уберите спецсимволы: скобки, восклицательные знаки и т. п.', RIGHTWAY ),
+        );
+        if ( isset( $known[ $text ] ) ) {
+            return $known[ $text ];
+        }
+        return $text;
     }
     
     /**
