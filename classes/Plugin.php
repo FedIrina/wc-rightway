@@ -558,6 +558,76 @@ class Plugin
 	 */
 	const LOGFILE = 'rightway.log';
 
+	/** Максимальный размер активного файла лога перед ротацией (10 МБ). */
+	const LOG_MAX_BYTES = 10485760;
+
+	/** Число архивов .log.1 … .log.N при включённом удалении старых логов. */
+	const LOG_MAX_ARCHIVE_FILES = 5;
+
+	/**
+	 * Ротация лога при превышении {@see LOG_MAX_BYTES}: active → .log.1, сдвиг архивов.
+	 *
+	 * @param string $log_path Полный путь к активному файлу лога.
+	 * @return void
+	 */
+	private static function maybe_rotate_log_file( $log_path ) {
+		if ( ! is_string( $log_path ) || '' === $log_path || ! file_exists( $log_path ) ) {
+			return;
+		}
+
+		$file_size = @filesize( $log_path );
+		if ( false === $file_size || $file_size < self::LOG_MAX_BYTES ) {
+			return;
+		}
+
+		$delete_old = 'yes' === (string) \WC_Admin_Settings::get_option( 'wc_rightway_log_rotate_delete_old' );
+
+		if ( $delete_old ) {
+		// Удаляем самый старый архив
+			$oldest = $log_path . '.' . self::LOG_MAX_ARCHIVE_FILES;
+			if ( file_exists( $oldest ) ) {
+				@unlink( $oldest );
+			}
+			// Сдвигаем остальные архивы на один номер вверх
+			for ( $i = self::LOG_MAX_ARCHIVE_FILES - 1; $i >= 1; $i-- ) {
+				$from = $log_path . '.' . $i;
+				$to   = $log_path . '.' . ( $i + 1 );
+				if ( file_exists( $from ) ) {
+					@rename( $from, $to );
+				}
+			}
+		} else {
+
+			$max_index = 0;
+			foreach ( glob( $log_path . '.*' ) as $archive_path ) {
+				if ( preg_match( '/\.(\d+)$/', $archive_path, $matches ) ) {
+					$max_index = max( $max_index, (int) $matches[1] );
+				}
+			}
+			for ( $i = $max_index; $i >= 1; $i-- ) {
+				$from = $log_path . '.' . $i;
+				$to   = $log_path . '.' . ( $i + 1 );
+				if ( file_exists( $from ) ) {
+					@rename( $from, $to );
+				}
+			}
+		}
+		// Переименовываем активный файл в .1
+		@rename( $log_path, $log_path . '.1' );
+	}
+
+	/**
+	 * Дозапись строки в файл лога с предварительной ротацией при необходимости.
+	 *
+	 * @param string $log_path Полный путь к файлу.
+	 * @param string $line     Строка с переводом строки в конце.
+	 * @return void
+	 */
+	private static function append_to_log_file( $log_path, $line ) {
+		self::maybe_rotate_log_file( $log_path );
+		file_put_contents( $log_path, $line, FILE_APPEND );
+	}
+
 	/**
 	 * Пишет строку или дамп массива/объекта в файл лога плагина или в {@see error_log()}.
 	 *
@@ -567,37 +637,30 @@ class Plugin
 	 */
 	public function log( $message, $logfile = self::LOGFILE )
 	{
-		//if ( WP_DEBUG )
-		//{
-			if ( !empty( $logfile ) ) {
-				$logfile = $this->path . $logfile;
-			}
-			if (is_array($message) || is_object($message)) 
-			{
-				if ( empty( $logfile ) )
-				{
+		if ( ! empty( $logfile ) ) {
+			$log_path = $this->path . $logfile;
+		} else {
+			$log_path = '';
+		}
 
-				} else
-				{
-					file_put_contents( $logfile, 
-						'[' . date('d.m.Y H:i:s') . '] ' . ': ' . print_r( $message, true ) . PHP_EOL, 
-						FILE_APPEND );	
-				}
-			} 
-			else 
-			{
-				if ( empty( $logfile ) )
-				{
-					error_log( RIGHTWAY . ': ' . $message );
-				}
-				else
-				{
-					file_put_contents( $logfile, 
-						'[' . date('d.m.Y H:i:s') . '] ' . ': ' . $message . PHP_EOL, 
-						FILE_APPEND );	
-				}				
-			}			
-		//}
+		if ( is_array( $message ) || is_object( $message ) ) {
+			if ( empty( $log_path ) ) {
+				return;
+			}
+			self::append_to_log_file(
+				$log_path,
+				'[' . date( 'd.m.Y H:i:s' ) . '] ' . ': ' . print_r( $message, true ) . PHP_EOL
+			);
+		} else {
+			if ( empty( $log_path ) ) {
+				error_log( RIGHTWAY . ': ' . $message );
+			} else {
+				self::append_to_log_file(
+					$log_path,
+					'[' . date( 'd.m.Y H:i:s' ) . '] ' . ': ' . $message . PHP_EOL
+				);
+			}
+		}
 	}
 
 	/**
@@ -1297,6 +1360,14 @@ class Plugin
 			'default' 	=> 'no',
 			'desc'		=> __( 'Если включено, блок управления бонусами не будет отображаться на checkout странице, когда применен любой купон', RIGTWAY )
 		);
+
+		$settings['wc-rightway-log-rotate-delete-old'] = array(
+			'name'    => __( 'Удалять старые файлы логов при ротации', RIGTWAY ),
+			'id'      => 'wc_rightway_log_rotate_delete_old',
+			'type'    => 'checkbox',
+			'default' => 'yes',
+			'desc'    => __( 'При размере лога более 10 МБ: active → .log.1, хранить до 5 архивов. Если выключено — архивы накапливаются без удаления.', RIGTWAY ),
+		);
 		
 		$settings['section_end'] = array(
 			'type' => 'sectionend',
@@ -1884,6 +1955,17 @@ class Plugin
 		if ('billing' !== $load_address) {
 			return;
 		}
+		Plugin::get()->log(
+			'Сохранение RW в профиле user_id=' . $user_id . ': '
+			. wp_json_encode(
+				array(
+					'customerId'  => isset( $_POST['customerId'] ) ? $_POST['customerId'] : null,
+					'cardId'      => isset( $_POST['cardId'] ) ? $_POST['cardId'] : null,
+					'cardNumber'  => isset( $_POST['cardNumber'] ) ? $_POST['cardNumber'] : null,
+				),
+				JSON_UNESCAPED_UNICODE
+			)
+		);
 		if ( isset( $_POST['birthDate'] ) ) {
 			update_user_meta( $user_id, 'birthDate', $_POST['birthDate']);
 		}
