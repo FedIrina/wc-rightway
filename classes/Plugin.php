@@ -78,7 +78,7 @@ class Plugin
 	public static function get()
 	{
 		if ( static::$instance === null )
-			throw new \Exception( __('Объект Plugin не инициализирован!', RIGHTWAY) ); 
+			throw new \Exception( __('Объект Plugin не инициализирован!', 'rightway') ); 
 			
 		return static::$instance;
 	}
@@ -496,9 +496,15 @@ class Plugin
 	 * @return void
 	 */
 	public function save_additional_user_profile_fields( $user_id ) {
-		update_user_meta( $user_id, 'customerId', sanitize_text_field( $_POST[ 'customerId' ] ) );
-		update_user_meta( $user_id, 'cardId', sanitize_text_field( $_POST[ 'cardId' ] ) );
-		update_user_meta( $user_id, 'cardNumber', sanitize_text_field( $_POST[ 'cardNumber' ] ) );
+		if ( isset( $_POST['customerId'] ) ) {
+			update_user_meta( $user_id, 'customerId', sanitize_text_field( wp_unslash( $_POST['customerId'] ) ) );
+		}
+		if ( isset( $_POST['cardId'] ) ) {
+			update_user_meta( $user_id, 'cardId', sanitize_text_field( wp_unslash( $_POST['cardId'] ) ) );
+		}
+		if ( isset( $_POST['cardNumber'] ) ) {
+			update_user_meta( $user_id, 'cardNumber', sanitize_text_field( wp_unslash( $_POST['cardNumber'] ) ) );
+		}
 	}
 
 	/**
@@ -509,7 +515,7 @@ class Plugin
 	public function plugins_loaded()
 	{
 		// Локализация
-		load_plugin_textdomain( RIGHTWAY, false, basename( dirname( __FILE__ ) ) . '/lang' );
+		load_plugin_textdomain( 'rightway', false, plugin_basename( dirname( dirname( __FILE__ ) ) ) . '/lang' );
 	}
 	
 	/**
@@ -545,11 +551,12 @@ class Plugin
 	public function showNoticeNoWC()
 	{
 		echo '<div class="notice notice-warning no-woocommerce"><p>';
-		printf( 
-			esc_html__( 'Для работы плагина "%s" требуется установить и активировать плагин WooCommerce.', RIGHTWAY ), 
-			$this->name . ' ' . $this->version  
+		/* translators: %s: plugin name and version. */
+		printf(
+			esc_html__( 'Для работы плагина "%s" требуется установить и активировать плагин WooCommerce.', 'rightway' ),
+			$this->name . ' ' . $this->version
 		);
-		_e( 'В настоящий момент все функции плагина деактивированы.', RIGHTWAY );
+		_e( 'В настоящий момент все функции плагина деактивированы.', 'rightway' );
 		echo '</p></div>';
 	}
 
@@ -649,7 +656,7 @@ class Plugin
 			}
 			self::append_to_log_file(
 				$log_path,
-				'[' . date( 'd.m.Y H:i:s' ) . '] ' . ': ' . print_r( $message, true ) . PHP_EOL
+				'[' . date( 'd.m.Y H:i:s' ) . '] ' . ': ' . wp_json_encode( $message, JSON_UNESCAPED_UNICODE ) . PHP_EOL
 			);
 		} else {
 			if ( empty( $log_path ) ) {
@@ -670,9 +677,9 @@ class Plugin
 	 */
 	public function load_plugin_textdomain() {
 		$locale = is_admin() && function_exists( 'get_user_locale' ) ? get_user_locale() : get_locale();
-		$locale = apply_filters( 'plugin_locale', $locale, RIGHTWAY );
+		$locale = apply_filters( 'plugin_locale', $locale, 'rightway' );
 
-		load_textdomain( RIGHTWAY, trailingslashit( WP_LANG_DIR ) . 'rightway/'.RIGHTWAY.'-' . $locale . '.mo' );
+		load_textdomain( 'rightway', trailingslashit( WP_LANG_DIR ) . 'rightway/rightway-' . $locale . '.mo' );
 		load_plugin_textdomain( 'wc-whatsapp-notification', false, plugin_basename( dirname( __FILE__ ) ) . '/languages/' );
 	}
 
@@ -692,9 +699,6 @@ class Plugin
 			$mainContact=($allowSms)?'Sms':'Email';
 		}
 		$customerRWInfo  = $this->rightWayAPI->getCustomerInfo($user);
-/* 		ob_start();
-		var_dump($customerRWInfo);               
-		Plugin::get()->log( __( 'Ответ RW на запрос информации о клиенте RW', RIGHTWAY ) . ': ' .ob_get_clean() ); */				
 		// Выбираем контакт для отправки подтверждающего кода
 		if (isset($customerRWInfo[0]['contacts'])) {
 			foreach ($customerRWInfo[0]['contacts'] as $customerContact) {
@@ -718,10 +722,14 @@ class Plugin
 	 */
 	public function send_confirm_code() {
 		$this->verify_rightway_ajax_nonce();
+		if ( ! isset( $_POST['contactId'] ) || '' === (string) $_POST['contactId'] ) {
+			wp_send_json_error( 'Не указан идентификатор контакта.' );
+		}
+		$contact_id = sanitize_text_field( wp_unslash( $_POST['contactId'] ) );
 		try {
-			$this->rightWayAPI->sendConfirmationCode($_POST['contactId']);
-			Plugin::get()->log( 'Код отправлен на contactId='+$_POST['contactId'] );
-			wp_send_json_success('Код отправлен на contactId='+$_POST['contactId']); // ВРЕМЕННО ДЛЯ ТЕСТИРОВАНИЯ
+			$this->rightWayAPI->sendConfirmationCode( $contact_id );
+			Plugin::get()->log( 'Код отправлен на contactId=' . $contact_id );
+			wp_send_json_success( 'Код отправлен на contactId=' . $contact_id ); // ВРЕМЕННО ДЛЯ ТЕСТИРОВАНИЯ
 		} catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
 			wp_send_json_error($e->getMessage());
@@ -733,10 +741,14 @@ class Plugin
 	 *
 	 * @return void
 	 */
-	public function send_confirm_contact_code() {	
+	public function send_confirm_contact_code() {
 		$this->verify_rightway_ajax_nonce();
+		if ( ! isset( $_POST['contactValue'] ) || '' === (string) $_POST['contactValue'] ) {
+			wp_send_json_error( 'Не указано значение контакта.' );
+		}
+		$contact_value = sanitize_text_field( wp_unslash( $_POST['contactValue'] ) );
 		try {
-			$result = $this->rightWayAPI->sendContactConfirmationCode($_POST['contactValue']);
+			$result = $this->rightWayAPI->sendContactConfirmationCode( $contact_value );
 			wp_send_json_success($result); // ВРЕМЕННО ДЛЯ ТЕСТИРОВАНИЯ
 		} catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -749,10 +761,18 @@ class Plugin
 	 *
 	 * @return void
 	 */
-	public function get_contact_token() {	
+	public function get_contact_token() {
 		$this->verify_rightway_ajax_nonce();
+		if ( ! isset( $_POST['contactValue'] ) || '' === (string) $_POST['contactValue'] ) {
+			wp_send_json_error( 'Не указано значение контакта.' );
+		}
+		if ( ! isset( $_POST['confirmCode'] ) || '' === (string) $_POST['confirmCode'] ) {
+			wp_send_json_error( 'Не указан код подтверждения.' );
+		}
+		$contact_value = sanitize_text_field( wp_unslash( $_POST['contactValue'] ) );
+		$confirm_code  = sanitize_text_field( wp_unslash( $_POST['confirmCode'] ) );
 		try {
-			$result = $this->rightWayAPI->getToken($_POST['contactValue'], $_POST['confirmCode']);
+			$result = $this->rightWayAPI->getToken( $contact_value, $confirm_code );
 			wp_send_json_success($result);
 		} catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -811,7 +831,7 @@ class Plugin
 			if (!$cardId) { ?>
 					<div class="woocommerce-notices-wrapper">
 						<div class="woocommerce-attension">
-							<?php _e('Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в Личный кабинет в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a>, заполнить поля анкеты актуальными данными и подтвердить контакт. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', 'medknigaservis'); ?>
+							<?php _e('Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в Личный кабинет в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a>, заполнить поля анкеты актуальными данными и подтвердить контакт. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', 'rightway'); ?>
 						</div>
 						<div class="notice">Ознакомиться с бонусной программой Вы можете, перейдя по <a href="https://medknigaservis.ru/news/2024/03/bonusnaya-programma/"> ссылке.</a></div>
 					</div>
@@ -851,7 +871,7 @@ class Plugin
 		} else { ?>
 			<div class="woocommerce-notices-wrapper">
 			<div class="woocommerce-attension">
-				<?php _e('Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется зарегистрироваться на сайте, перейти в Личный кабинет в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a>, заполнить поля анкеты актуальными данными и подтвердить контакт. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', 'medknigaservis'); ?>
+				<?php _e('Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется зарегистрироваться на сайте, перейти в Личный кабинет в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a>, заполнить поля анкеты актуальными данными и подтвердить контакт. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', 'rightway'); ?>
 			</div>
 			<div class="notice">Ознакомиться с бонусной программой Вы можете, перейдя по <a href="https://medknigaservis.ru/news/2024/03/bonusnaya-programma/"> ссылке.</a></div>
 		</div>
@@ -1011,15 +1031,19 @@ class Plugin
 	 */
 	public function get_active_bonuses() {
 		$this->verify_rightway_ajax_nonce();
-		if ( !isset($_POST['billing_phone']) ) {
+		if ( ! isset( $_POST['billing_phone'] ) || '' === (string) $_POST['billing_phone'] ) {
 			wp_send_json_error('Для доступа к бонусам нужно указать номер телефона.');
 		}
-		$useBonuses =  ($_POST['use_bonuses'] === 'true')?"Да":"Нет";
-		$addBonuses =  ($_POST['add_bonuses'] === 'true')?"Да":"Нет";
+		$billing_phone_raw = sanitize_text_field( wp_unslash( $_POST['billing_phone'] ) );
+		$use_bonuses_raw   = isset( $_POST['use_bonuses'] ) ? sanitize_text_field( wp_unslash( $_POST['use_bonuses'] ) ) : 'false';
+		$add_bonuses_raw   = isset( $_POST['add_bonuses'] ) ? sanitize_text_field( wp_unslash( $_POST['add_bonuses'] ) ) : 'false';
+		$payment_method    = isset( $_POST['payment_method'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_method'] ) ) : '';
+		$useBonuses        = ( 'true' === $use_bonuses_raw ) ? 'Да' : 'Нет';
+		$addBonuses        = ( 'true' === $add_bonuses_raw ) ? 'Да' : 'Нет';
 		Plugin::get()->log('$useBonuses='.$useBonuses);
 		Plugin::get()->log('$addBonuses='.$addBonuses);
 		Plugin::get()->log('Способ оплаты: ');
-		Plugin::get()->log($_POST['payment_method']);
+		Plugin::get()->log( $payment_method );
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			//if ( !empty( $user->roles ) && is_array( $user->roles ) ) {
@@ -1027,7 +1051,7 @@ class Plugin
 				//if (in_array('customer',$user->roles)) {
 				// Подготовка данных для запроса доступных бонусов
 
-					if (isset($_POST['payment_method']) && $_POST['payment_method'] == 'cod') {
+					if ( 'cod' === $payment_method ) {
 						$paymentType = "Кредит";
 					} else {
 						$paymentType = "Наличный";
@@ -1048,7 +1072,7 @@ class Plugin
 					}
 					$cardNumber = get_user_meta( $user->ID, 'cardNumber', true );
 					//$billing_phone = str_replace(array(' ', '(' , ')', '-'), '', get_user_meta( $user->ID, 'billing_phone', true ));
-					$billing_phone = str_replace(array(' ', '(' , ')', '-'), '', $_POST['billing_phone']);
+					$billing_phone = str_replace( array( ' ', '(', ')', '-' ), '', $billing_phone_raw );
 					$docNumber = $cardInfo['id'].date(YmdHms); //Должен быть сохранен в сессии до момента оформления данного заказа
 					$brandId = $this->rightWayAPI->brandId;
 					$brandId = 'MEDKNIGASERVIS';
@@ -1099,6 +1123,7 @@ class Plugin
 	 */
 	  public function calculateActionDiscount() {
 		$this->verify_rightway_ajax_nonce();
+		$payment_method = isset( $_POST['payment_method'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_method'] ) ) : '';
 		// Подготовка данных для запроса скидки
 		$chequeStr='';
 		foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
@@ -1115,7 +1140,7 @@ class Plugin
 		$brandId = 'MEDKNIGASERVIS';
 		$shopId = '0000';
 		$shopName = "Internet";
-		if (isset($_POST['payment_method']) && $_POST['payment_method'] == 'cod') {
+		if ( 'cod' === $payment_method ) {
 			$paymentType = "Кредит";
 		} else {
 			$paymentType = "Наличный";
@@ -1269,7 +1294,7 @@ class Plugin
 	 * @return array<string, string>
 	 */
 	public function add_settings_tab( $settings_tabs ) {
-		$settings_tabs['wc_rightway'] = _x( 'Программа лояльности', 'WooCommerce Settings Tab', RIGTWAY );
+		$settings_tabs['wc_rightway'] = _x( 'Программа лояльности', 'WooCommerce Settings Tab', 'rightway' );
 		return $settings_tabs;
 	}
 
@@ -1293,14 +1318,14 @@ class Plugin
 		$settings=[];
 		$selected_options = woocommerce_settings_get_option('wc-rightway');	
 		$settings['section_title'] = array(
-				'name'     => __( 'Настройки программы лояльности', RIGTWAY ),
+				'name'     => __( 'Настройки программы лояльности', 'rightway' ),
 				'type'     => 'title',
 				'desc'     => '',
 				'id'       => 'do_section_title'
 		);
 
 		$settings['wc-rightway-brand-id'] = array(
-			'name'     => __( 'Идентификатор бренда', RIGTWAY ),
+			'name'     => __( 'Идентификатор бренда', 'rightway' ),
 			'id'		=> 'wc_rightway_brand_id',
 			'type'    	=> 'text',
 			'default' 	=> '',
@@ -1308,7 +1333,7 @@ class Plugin
 		);
 
 		$settings['wc-rightway-shop-name'] = array(
-			'name'     => __( 'Наименование магазина', RIGTWAY ),
+			'name'     => __( 'Наименование магазина', 'rightway' ),
 			'id'		=> 'wc_rightway_shop_name',
 			'type'    	=> 'text',
 			'default' 	=> '',
@@ -1316,21 +1341,21 @@ class Plugin
 		);		
 
 		$settings['wc-rightway-api-key'] = array(
-				'name'     => __( 'X-API key', RIGTWAY ),
+				'name'     => __( 'X-API key', 'rightway' ),
 				'id'		=> 'wc_rightway_api_key',
 				'type'    	=> 'text',
 				'default' 	=> ''
 		);
 
 		$settings['wc-rightway-api-virsion'] = array(
-			'name'     => __( 'X-API version', RIGTWAY ),
+			'name'     => __( 'X-API version', 'rightway' ),
 			'id'		=> 'wc_rightway_api_version',
 			'type'    	=> 'text',
 			'default' 	=> ''
 		);
 
 		$settings['wc-rightway-tssa-key'] = array(
-			'name'     => __( 'Ключ TSSA', RIGTWAY ),
+			'name'     => __( 'Ключ TSSA', 'rightway' ),
 			'id'		=> 'wc_rightway_tssa_key',
 			'type'    	=> 'text',
 			'default' 	=> '',
@@ -1338,7 +1363,7 @@ class Plugin
 		);
 
 		$settings['wc-rightway-x-processing-version'] = array(
-			'name'     => __( 'Версия процессинга', RIGTWAY ),
+			'name'     => __( 'Версия процессинга', 'rightway' ),
 			'id'		=> 'wc_rightway_x_processing_version',
 			'type'    	=> 'text',
 			'default' 	=> '',
@@ -1346,7 +1371,7 @@ class Plugin
 		);
 
 		$settings['wc-rightway-x-processing-key'] = array(
-			'name'     => __( 'Ключ процессинга', RIGTWAY ),
+			'name'     => __( 'Ключ процессинга', 'rightway' ),
 			'id'		=> 'wc_rightway_x_processing_key',
 			'type'    	=> 'text',
 			'default' 	=> '',
@@ -1354,19 +1379,19 @@ class Plugin
 		);
 
 		$settings['wc-rightway-hide-bonuses-with-coupon'] = array(
-			'name'     => __( 'Не показывать блок бонусов при применении купона', RIGTWAY ),
+			'name'     => __( 'Не показывать блок бонусов при применении купона', 'rightway' ),
 			'id'		=> 'wc_rightway_hide_bonuses_with_coupon',
 			'type'    	=> 'checkbox',
 			'default' 	=> 'no',
-			'desc'		=> __( 'Если включено, блок управления бонусами не будет отображаться на checkout странице, когда применен любой купон', RIGTWAY )
+			'desc'		=> __( 'Если включено, блок управления бонусами не будет отображаться на checkout странице, когда применен любой купон', 'rightway' )
 		);
 
 		$settings['wc-rightway-log-rotate-delete-old'] = array(
-			'name'    => __( 'Удалять старые файлы логов при ротации', RIGTWAY ),
+			'name'    => __( 'Удалять старые файлы логов при ротации', 'rightway' ),
 			'id'      => 'wc_rightway_log_rotate_delete_old',
 			'type'    => 'checkbox',
 			'default' => 'yes',
-			'desc'    => __( 'При размере лога более 10 МБ: active → .log.1, хранить до 5 архивов. Если выключено — архивы накапливаются без удаления.', RIGTWAY ),
+			'desc'    => __( 'При размере лога более 10 МБ: active → .log.1, хранить до 5 архивов. Если выключено — архивы накапливаются без удаления.', 'rightway' ),
 		);
 		
 		$settings['section_end'] = array(
@@ -1416,19 +1441,11 @@ class Plugin
 							$billing_phone = '+'.$billing_phone;
 						}
 						if (strpos($customerContact['value'], '+') !== false && $customerContact['value'] !== $billing_phone ) {
-							ob_start();
-							var_dump($customerContact['value']);
-							var_dump($billing_phone);
-							$mismatchedData = ob_get_clean();
 							$contactId = $customerContact['id'];
 							$notMatch = true;
 							break;
 						}
 						if (strpos($customerContact['value'], '@') !== false && $customerContact['value'] !== $billing_email_rw) {
-							ob_start();
-							var_dump($customerContact['value']);
-							var_dump($billing_email_rw);
-							$mismatchedData = ob_get_clean();
 							$contactId = $customerContact['id'];
 							$notMatch = true;
 							break;
@@ -1444,9 +1461,8 @@ class Plugin
 					if ( $notMatch ) { ?>
 					<div class="woocommerce-notices-wrapper">
 						<ul class="woocommerce-attension">
-							<li><?php _e( 'Анкетные данные на сайте не совпадают с анкетными данными бонусной карты или не заполнены. Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a> и заполнить поля анкеты актуальными данными.', RIGHTWAY ); ?> </li>
+							<li><?php _e( 'Анкетные данные на сайте не совпадают с анкетными данными бонусной карты или не заполнены. Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a> и заполнить поля анкеты актуальными данными.', 'rightway' ); ?> </li>
 						</ul>
-						<div class="mismatched-data"><?php //echo $mismatchedData; ?></div>
 						<div class="notice">Ознакомиться с бонусной программой Вы можете, перейдя по <a href="https://medknigaservis.ru/news/2024/03/bonusnaya-programma/"> ссылке.</a></div>
 					</div>						
 					<?php 
@@ -1456,8 +1472,8 @@ class Plugin
 						Plugin::get()->log( $e->getMessage() ); ?>
 						<div class="woocommerce-notices-wrapper">
 							<ul class="woocommerce-error" role="alert">
-								<li><?php _e( 'Не удалось получить информацию о лояльности клиента.', RIGHTWAY ); ?> </li>
-								<li><?php echo $e->getMessage(); ?></li>
+								<li><?php _e( 'Не удалось получить информацию о лояльности клиента.', 'rightway' ); ?> </li>
+								<li><?php echo esc_html( $e->getMessage() ); ?></li>
 							</ul>
 						</div>
 					<?php
@@ -1467,7 +1483,7 @@ class Plugin
 					// Предлагаем участвовать в программе лояльности, указав свой номер телефона ?>
 					<div class="woocommerce-notices-wrapper">
 						<div class="woocommerce-attension">
-							<?php _e( 'Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a> и заполнить поля анкеты актуальными данными. При этом на Ваш номер телефона придет код подтверджения. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', RIGHTWAY ); ?>
+							<?php _e( 'Для того, чтобы воспользоваться преимуществами нашей бонусной программы, рекомендуется перейти в раздел <a href="/my-account/edit-address/billing/">"Данные покупателя"</a> и заполнить поля анкеты актуальными данными. При этом на Ваш номер телефона придет код подтверджения. <b>Чтобы бонусы можно было списать и/или начислить уже для данного заказа, обновите страницу в браузере</b>.', 'rightway' ); ?>
 						</div>
 						<div class="notice">Ознакомиться с бонусной программой Вы можете, перейдя по <a href="https://medknigaservis.ru/news/2024/03/bonusnaya-programma/"> ссылке.</a></div>
 					</div>
@@ -1517,7 +1533,7 @@ class Plugin
 		$user = wp_get_current_user();
 		$cardId = get_user_meta( $user->ID, 'cardId', true );
 		$bonusesArray = $this->rightWayAPI->getCustomerRWBonuses($cardId);
-		echo '<h3>'.__( 'Мои бонусы', RIGHTWAY ).'</h3>'; 
+		echo '<h3>' . esc_html( __( 'Мои бонусы', 'rightway' ) ) . '</h3>'; 
 		if (count($bonusesArray) !=0) :
 			// Перебираем все пакеты бонусов и суммируем все активные на данный момент бонусы
 			$activeBonusesSum = 0;
@@ -1526,11 +1542,11 @@ class Plugin
 			} ?>
 		<div class="bonuses">
 		<div class="bonuses__info">
-		  <span class="bonuses__txt"><?php _e('На сегодня Вам доступно:', RIGHTWAY); ?></span><span class="
+		  <span class="bonuses__txt"><?php _e('На сегодня Вам доступно:', 'rightway'); ?></span><span class="
 			bonuses__total"><?php echo $activeBonusesSum; ?>&nbsp;бонусов</span>
 		</div>
 
-		<h4 class="bonuses__subtitle"><?php _e('История начисления бонусов:', RIGHTWAY); ?></h4>
+		<h4 class="bonuses__subtitle"><?php _e('История начисления бонусов:', 'rightway'); ?></h4>
 		<!-- ================ -->
 
 		<table class="table">
@@ -1538,23 +1554,23 @@ class Plugin
 			<?php foreach($bonusesArray as $purchase) { ?>
 			<tr>
 			  <td>
-				<div class="td__label"><?php _e('Начислены:', RIGHTWAY); ?></div>
+				<div class="td__label"><?php _e('Начислены:', 'rightway'); ?></div>
 				<div class="td__value"><?php echo $purchase['createdOn']; ?></div>
 			  </td>
 			  <td>
-				<div class="td__label"><?php _e('Сгорят', RIGHTWAY); ?>:</div>
+				<div class="td__label"><?php _e('Сгорят', 'rightway'); ?>:</div>
 				<div class="td__value"><?php echo $purchase['expiredOn']; ?></div>
 			  </td>
 			  <td>
-				<div class="td__label"><?php _e('Активны', RIGHTWAY); ?>:</div>
+				<div class="td__label"><?php _e('Активны', 'rightway'); ?>:</div>
 				<div class="td__value"><?php echo $purchase['active']; ?></div>
 			  </td>
 			  <td>
-				<div class="td__label"><?php _e('Использованы:', RIGHTWAY); ?></div>
+				<div class="td__label"><?php _e('Использованы:', 'rightway'); ?></div>
 				<div class="td__value"><?php echo $purchase['used']; ?></div>
 			  </td>
 			  <td>
-				<div class="td__label"><?php _e('Тип бонусов:', RIGHTWAY); ?></div>
+				<div class="td__label"><?php _e('Тип бонусов:', 'rightway'); ?></div>
 				<div class="td__value"><?php echo $purchase['bonusType']; ?></div>
 			  </td>
 			</tr>
@@ -1563,7 +1579,7 @@ class Plugin
 		</table>
 		<?php else: ?>
 			<!-- Если нет бонусов -->
-			<div class="bonuses__not"><?php _e('Вы пока не получали бонусов', RIGHTWAY); ?></div>
+			<div class="bonuses__not"><?php _e('Вы пока не получали бонусов', 'rightway'); ?></div>
 		<?php endif; ?>
 
 	  </div>
@@ -1623,27 +1639,27 @@ class Plugin
 		}
 		?>
 		<form id="woocommerce-edit-communication" method="post">
-		<h3><?php _e( 'Настройки коммуникации', RIGHTWAY ); ?></h3>
-		<p><?php _e( 'Каналы коммуникации (для отправки кода подтверждения при операциях с бонусами):', RIGHTWAY); ?></p>
+		<h3><?php _e( 'Настройки коммуникации', 'rightway' ); ?></h3>
+		<p><?php _e( 'Каналы коммуникации (для отправки кода подтверждения при операциях с бонусами):', 'rightway'); ?></p>
 		<div class="communication-item">
 			<label class="checkbox_button checkbox">
 				<input type="checkbox" class="input-checkbox " name="allowSms" id="allowSms" value="1" <?php checked( $allowSms, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
-				<div class="title"><?php _e( 'SMS', RIGHTWAY); ?></div>
+				<div class="title"><?php _e( 'SMS', 'rightway'); ?></div>
 			</label>
 		</div>
 		<div class="communication-item">
 			<label class="checkbox_button checkbox">
 				<input type="checkbox" class="input-checkbox " name="allowEmail" id="allowEmail" value="1" <?php checked( $allowEmail, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
-				<div class="title"><?php _e( 'Email', RIGHTWAY); ?></div>
+				<div class="title"><?php _e( 'Email', 'rightway'); ?></div>
 			</label>
 		</div>
 		<div class="communication-item">	
 			<label class="checkbox_button checkbox">
 				<input type="checkbox" class="input-checkbox " name="allowMarketingCommunication" id="allowMarketingCommunication" value="1" <?php checked( $allowMarketingCommunication, 1 ); ?>>
 				<div class="checkbox_button-check"></div>
-				<div class="title"><?php _e( 'Разрешение на маркетинговые коммуникации', RIGHTWAY); ?></div>
+				<div class="title"><?php _e( 'Разрешение на маркетинговые коммуникации', 'rightway'); ?></div>
 			</label>
 		</div>			
 		<?php
@@ -1653,7 +1669,7 @@ class Plugin
 				'type'        	=> 'checkbox',
 				'required'    	=> false,
 				'class'       	=> array('form-row-wide'),
-				'label'       	=> __( 'sms', RIGHTWAY),
+				'label'       	=> __( 'sms', 'rightway'),
 				'value'			=> '',
 				'default'		=> 1,
 				'description' => '',
@@ -1667,7 +1683,7 @@ class Plugin
 				'type'        	=> 'checkbox',
 				'required'    	=> false,
 				'class'       	=> array('form-row-wide'),
-				'label'       	=> __( 'Email', RIGHTWAY),
+				'label'       	=> __( 'Email', 'rightway'),
 				'value'			=> '',
 				'default'		=> 0,
 				'description' => '',
@@ -1681,7 +1697,7 @@ class Plugin
 				'required'    	=> false,
 				'class'       	=> array('form-row-wide'),
 				'clear'			=> true,
-				'label'       	=> __( 'Разрешение на маркетинговые коммуникации', RIGHTWAY),
+				'label'       	=> __( 'Разрешение на маркетинговые коммуникации', 'rightway'),
 				'value'			=> '',
 				'default'		=> 0,
 				'description' => '',
@@ -1691,7 +1707,7 @@ class Plugin
 		<input type="hidden" class="button" name="change_meta" value="change">
 		
 		<div class="cabinet_data-button">
-			<input type="submit" class="form-submit" name="save_address" value="<?php _e('Сохранить', RIGHTWAY); ?>">
+			<input type="submit" class="form-submit" name="save_address" value="<?php _e('Сохранить', 'rightway'); ?>">
 			</div>
 		</form>
 		<?php
@@ -1790,14 +1806,24 @@ class Plugin
 			wp_send_json_error( 'У учётной записи не привязан покупатель RightWay.' );
 		}
 
-		// Подготавливаем данные контакта в RW
-		$contactValue = isset($_POST['value'])?str_replace(array(' ', '(' , ')', '-'), '', $_POST['value']):'';
+		if ( ! isset( $_POST['value'] ) || '' === (string) $_POST['value'] ) {
+			wp_send_json_error( 'Не указано значение контакта.' );
+		}
+		if ( ! isset( $_POST['token'] ) || '' === (string) $_POST['token'] ) {
+			wp_send_json_error( 'Не указан токен.' );
+		}
+		$contact_value = str_replace(
+			array( ' ', '(', ')', '-' ),
+			'',
+			sanitize_text_field( wp_unslash( $_POST['value'] ) )
+		);
+		$token = sanitize_text_field( wp_unslash( $_POST['token'] ) );
 		$contactData = array(
-			"value" => $contactValue
+			'value' => $contact_value,
 		);
 
 		try {
-			$this->rightWayAPI->createContactData($contactData, $customer_id, $_POST['token']);
+			$this->rightWayAPI->createContactData( $contactData, $customer_id, $token );
 			wp_send_json_success( true );
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -1881,25 +1907,33 @@ class Plugin
 		$user = wp_get_current_user();
 
 		Plugin::get()->log( 'Inside edit_RW_customer_data function' );
+		if ( ! isset( $_POST['customerId'] ) || '' === (string) $_POST['customerId'] ) {
+			wp_send_json_error( 'Не указан идентификатор покупателя.' );
+		}
+		$customer_id = sanitize_text_field( wp_unslash( $_POST['customerId'] ) );
 		$updatedCustomerRWInfo = array();
 
 		// Подготавливаем данные пользователя для обновления в RW
-		$updatedCustomerRWInfo['firstName'] = (isset($_POST['billing_first_name']))? $_POST['billing_first_name']:'';
+		$updatedCustomerRWInfo['firstName'] = isset( $_POST['billing_first_name'] )
+			? sanitize_text_field( wp_unslash( $_POST['billing_first_name'] ) )
+			: '';
 		$updatedCustomerRWInfo['middleName'] = '';
-		$updatedCustomerRWInfo['lastName'] = (isset($_POST['billing_last_name']))? $_POST['billing_last_name']:'';
-		$updatedCustomerRWInfo['gender'] =  (isset($_POST['gender']))?$_POST['gender']:'';
+		$updatedCustomerRWInfo['lastName'] = isset( $_POST['billing_last_name'] )
+			? sanitize_text_field( wp_unslash( $_POST['billing_last_name'] ) )
+			: '';
+		$updatedCustomerRWInfo['gender'] = isset( $_POST['gender'] )
+			? sanitize_text_field( wp_unslash( $_POST['gender'] ) )
+			: '';
 		$birth_date = isset( $_POST['birthDate'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['birthDate'] ) ) ) : '';
 		if ( $birth_date !== '' ) {
 			$updatedCustomerRWInfo['birthDate'] = $birth_date;
 		}
-		ob_start();
-		print_r( $updatedCustomerRWInfo );
-		Plugin::get()->log(ob_get_clean());
+		Plugin::get()->log( wp_json_encode( $updatedCustomerRWInfo, JSON_UNESCAPED_UNICODE ) );
 		/* $updatedCustomerRWInfo['confirmationCode'] = ''; */ // Вместо кода используем TSSA
 
 		// Обновляем данные пользователя в RW
 		try {
-			$this->rightWayAPI->updateCustomerData( $updatedCustomerRWInfo, $_POST['customerId'] );
+			$this->rightWayAPI->updateCustomerData( $updatedCustomerRWInfo, $customer_id );
 			wp_send_json_success('Данные покупателя обновлены благополучно');
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -1923,7 +1957,7 @@ class Plugin
 				'required'    	=> true,
 				'class'       	=> array('form-row-first'),
 				'clear'			=> false,
-				'label'       	=>  __( 'Дата рождения', RIGHTWAY),
+				'label'       	=>  __( 'Дата рождения', 'rightway'),
 				'description' 	=> '',
 			), 
 			get_user_meta( $user_id, 'birthDate', true )
@@ -1935,10 +1969,10 @@ class Plugin
 				'required'    	=> true,
 				'class'       	=> array('form-row-first'),
 				'clear'			=> true,
-				'label'       	=>  __( 'Пол', RIGHTWAY),
+				'label'       	=>  __( 'Пол', 'rightway'),
 				'options'     	=> array(
-					'm' => __('мужской'),
-					'f' => __('женский')),
+					'm' => __( 'мужской', 'rightway' ),
+					'f' => __( 'женский', 'rightway' ) ),
 				'default'		=> 'm',
 				'description' => '',
 			), 
@@ -1970,20 +2004,20 @@ class Plugin
 			)
 		);
 		if ( isset( $_POST['birthDate'] ) ) {
-			update_user_meta( $user_id, 'birthDate', $_POST['birthDate']);
+			update_user_meta( $user_id, 'birthDate', sanitize_text_field( wp_unslash( $_POST['birthDate'] ) ) );
 		}
 		if ( isset( $_POST['gender'] ) ) {
-			update_user_meta( $user_id, 'gender', $_POST['gender']);
+			update_user_meta( $user_id, 'gender', sanitize_text_field( wp_unslash( $_POST['gender'] ) ) );
 		}
 		if ( isset( $_POST['customerId'] ) ) {
-			update_user_meta( $user_id, 'customerId', $_POST['customerId']);
+			update_user_meta( $user_id, 'customerId', sanitize_text_field( wp_unslash( $_POST['customerId'] ) ) );
 		}
 		if ( isset( $_POST['cardId'] ) ) {
-			update_user_meta( $user_id, 'cardId', $_POST['cardId']);
+			update_user_meta( $user_id, 'cardId', sanitize_text_field( wp_unslash( $_POST['cardId'] ) ) );
 		}
 		if ( isset( $_POST['cardNumber'] ) ) {
-			update_user_meta( $user_id, 'cardNumber', $_POST['cardNumber']);
-		}									
+			update_user_meta( $user_id, 'cardNumber', sanitize_text_field( wp_unslash( $_POST['cardNumber'] ) ) );
+		}
 	}
 
 	/**
@@ -2019,12 +2053,13 @@ class Plugin
 	 */
 	public function get_customer_contacts() {
 		$this->verify_rightway_ajax_nonce();
-		if (!isset($_POST['customerId'])) {
-			wp_send_json_error('Не указан идентификатор пользователя!');
+		if ( ! isset( $_POST['customerId'] ) || '' === (string) $_POST['customerId'] ) {
+			wp_send_json_error( 'Не указан идентификатор пользователя!' );
 		}
+		$customer_id = sanitize_text_field( wp_unslash( $_POST['customerId'] ) );
 
 		try {
-			$customerСontacts = $this->rightWayAPI->getCustomerContacts($_POST['customerId']);
+			$customerСontacts = $this->rightWayAPI->getCustomerContacts( $customer_id );
 			wp_send_json_success($customerСontacts);
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -2039,24 +2074,27 @@ class Plugin
 	 */
 	public function get_RW_customers_quantity() {
 		$this->verify_rightway_ajax_nonce();
-		if ( !isset($_POST['phone']) && !isset($_POST['email']) ) {
-			wp_send_json_error('Не указан контакт!');
+		$phone = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+		$email = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+
+		if ( '' === $phone && '' === $email ) {
+			wp_send_json_error( 'Не указан контакт!' );
 		}
 
-		if ( isset($_POST['phone']) ) {
+		if ( '' !== $phone ) {
 			try {
-				$customersArray = $this->rightWayAPI->getCustomersByPhone($_POST['phone']);
-				wp_send_json_success(count($customersArray));
+				$customersArray = $this->rightWayAPI->getCustomersByPhone( $phone );
+				wp_send_json_success( count( $customersArray ) );
 			}	catch (\Exception $e) {
 				Plugin::get()->log( $e->getMessage() );
 				wp_send_json_error($e->getMessage());
 			}
 		}
 
-		if ( isset($_POST['email']) ) {
+		if ( '' !== $email ) {
 			try {
-				$customersArray = $this->rightWayAPI->getCustomersByEmail($_POST['email']);
-				wp_send_json_success(count($customersArray));
+				$customersArray = $this->rightWayAPI->getCustomersByEmail( $email );
+				wp_send_json_success( count( $customersArray ) );
 			}	catch (\Exception $e) {
 				Plugin::get()->log( $e->getMessage() );
 				wp_send_json_error($e->getMessage());
@@ -2072,24 +2110,26 @@ class Plugin
 	 */
 	  public function get_RW_customers() {
 		$this->verify_rightway_ajax_nonce();
-		if ( !isset($_POST['phone']) && !isset($_POST['email']) ) {
-			wp_send_json_error('Не указан контакт!');
+		$phone = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+		$email = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+
+		if ( '' === $phone && '' === $email ) {
+			wp_send_json_error( 'Не указан контакт!' );
 		}
 
-		if ( isset($_POST['phone']) ) {
+		if ( '' !== $phone ) {
 			try {
-				//Значение $_POST['phone'] должен соотвествоваь шаблону '^\\+7\\d{10}$'. Нужно проверять, и если не соответствует,
-				//то добавлять +7 в начало и передавать в запрос
-				if (!preg_match('/^\+7\d{10}$/', $_POST['phone'])) {
-					$_POST['phone'] = '+7'.$_POST['phone'];
+				// Значение $phone должно соответствовать шаблону '^\+7\d{10}$'; иначе добавляем +7 в начало.
+				if ( ! preg_match( '/^\+7\d{10}$/', $phone ) ) {
+					$phone = '+7' . $phone;
 				}
-				$customersArray = $this->rightWayAPI->getCustomersByPhone($_POST['phone']);
-				Plugin::get()->log( "Все пользователи с контактом ".$_POST['phone'] );
+				$customersArray = $this->rightWayAPI->getCustomersByPhone( $phone );
+				Plugin::get()->log( 'Все пользователи с контактом ' . $phone );
 				Plugin::get()->log( $customersArray );
 				if (count($customersArray) > 1) {
 					//Запрашиваем данные карт с таким номером телефона
 					try {
-						$allCardsArray = $this->rightWayAPI->getCardsData($_POST['phone']);
+						$allCardsArray = $this->rightWayAPI->getCardsData( $phone );
 						Plugin::get()->log( "У пользователя в RW несколько карт:");
 						Plugin::get()->log( $allCardsArray );
 
@@ -2134,17 +2174,18 @@ class Plugin
 								wp_send_json_success( $out );
 							}
 
-							Plugin::get()->log( "Незаблокированные карты с контактом ".$_POST['phone'].":" );
+							Plugin::get()->log( 'Незаблокированные карты с контактом ' . $phone . ':' );
 							Plugin::get()->log( $cardsArray );
 							Plugin::get()->log( "Карты, которые нужно объединить: " );
 							Plugin::get()->log( $cardsToMerge );
-							if (!isset($_POST['rwToken']) || !$_POST['rwToken']){
-								wp_send_json_error('Не получен токен для выполнения объединения карт');
+							$rw_token = isset( $_POST['rwToken'] ) ? sanitize_text_field( wp_unslash( $_POST['rwToken'] ) ) : '';
+							if ( '' === $rw_token ) {
+								wp_send_json_error( 'Не получен токен для выполнения объединения карт' );
 							}
 							$cardsData = array (
 								"resultCardId"=> $maxCardId,
 								"mergeCardsIds"=> $cardsToMerge,
-								"tokens" => array($_POST['rwToken'])
+								"tokens" => array( $rw_token ),
 							);
 							Plugin::get()->log( "body запроса на объединение: " );
 							Plugin::get()->log( $cardsData );
@@ -2158,7 +2199,7 @@ class Plugin
 								wp_send_json_error($e->getMessage());
 							}
 						} else {
-							Plugin::get()->log( 'Несколько покупателей с телефоном '.$_POST['phone'].', незаблокированных карт нет — ответ списком покупателей' );
+							Plugin::get()->log( 'Несколько покупателей с телефоном ' . $phone . ', незаблокированных карт нет — ответ списком покупателей' );
 						}
 					} catch (\Exception $e) {
 						Plugin::get()->log( $e->getMessage() );
@@ -2174,9 +2215,9 @@ class Plugin
 			}
 		}
 
-		if ( isset($_POST['email']) ) {
+		if ( '' !== $email ) {
 			try {
-				$customersArray = $this->rightWayAPI->getCustomersByEmail($_POST['email']);
+				$customersArray = $this->rightWayAPI->getCustomersByEmail( $email );
 				Plugin::get()->log( '[rightway_get_customers] outgoing JSON (email): ' . wp_json_encode( $customersArray, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR ) );
 				wp_send_json_success($customersArray);
 			}	catch (\Exception $e) {
@@ -2194,12 +2235,13 @@ class Plugin
 	 */
 	  public function get_RW_customer_cards() {
 		$this->verify_rightway_ajax_nonce();
-		if ( !isset($_POST['customerId']) && !$_POST['customerId']) {
-			wp_send_json_error('Не указан customerId!');
+		if ( ! isset( $_POST['customerId'] ) || '' === (string) $_POST['customerId'] ) {
+			wp_send_json_error( 'Не указан customerId!' );
 		}
+		$customer_id = sanitize_text_field( wp_unslash( $_POST['customerId'] ) );
 
 		try {
-			$cardsArray = $this->rightWayAPI->getCustomerCardData($_POST['customerId']);
+			$cardsArray = $this->rightWayAPI->getCustomerCardData( $customer_id );
 			wp_send_json_success($cardsArray);
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -2216,21 +2258,22 @@ class Plugin
 	public function create_RW_customer() {
 		$this->verify_rightway_ajax_nonce();
 		Plugin::get()->log( json_encode($_POST ));
-		if ( !isset($_POST['contact']) && !isset($_POST['value'] ) ) {
-			wp_send_json_error('Не указан телефон или email!');
-		}	
-
-		if ( !isset($_POST['token']) ) {
-			wp_send_json_error('Не указан token!');
+		$contact = isset( $_POST['contact'] ) ? sanitize_text_field( wp_unslash( $_POST['contact'] ) ) : '';
+		$value   = isset( $_POST['value'] ) ? sanitize_text_field( wp_unslash( $_POST['value'] ) ) : '';
+		if ( '' === $contact && '' === $value ) {
+			wp_send_json_error( 'Не указан телефон или email!' );
 		}
+		if ( ! isset( $_POST['token'] ) || '' === (string) $_POST['token'] ) {
+			wp_send_json_error( 'Не указан token!' );
+		}
+		$token = sanitize_text_field( wp_unslash( $_POST['token'] ) );
 
-		$firstName = (isset($_POST['firstName']))?$_POST['firstName']:'';
-		$lastName = (isset($_POST['lastName']))?$_POST['lastName']:'';
-		$birthDate = (isset($_POST['birthDate']))?$_POST['birthDate']:'';
-		$gender = (isset($_POST['gender']))?$_POST['gender']:'';
+		$firstName = isset( $_POST['firstName'] ) ? sanitize_text_field( wp_unslash( $_POST['firstName'] ) ) : '';
+		$lastName  = isset( $_POST['lastName'] ) ? sanitize_text_field( wp_unslash( $_POST['lastName'] ) ) : '';
+		$birthDate = isset( $_POST['birthDate'] ) ? sanitize_text_field( wp_unslash( $_POST['birthDate'] ) ) : '';
+		$gender    = isset( $_POST['gender'] ) ? sanitize_text_field( wp_unslash( $_POST['gender'] ) ) : '';
 
 		$result = false;
-		
 
 		// ВРЕМЕННО ДЛЯ ТЕСТА!!!
 		/********************* */
@@ -2245,7 +2288,7 @@ class Plugin
 
 		// Отправляем запрос на регистрацию пользователя
 		try {
-			$result = $this->rightWayAPI->registerRWClient($_POST['contact'],$_POST['value'], $_POST['token'], $firstName, $lastName, $birthDate, $gender);
+			$result = $this->rightWayAPI->registerRWClient( $contact, $value, $token, $firstName, $lastName, $birthDate, $gender );
 			Plugin::get()->log( $result );
 		}	catch (\Exception $e) {
 			Plugin::get()->log( $e->getMessage() );
@@ -2261,10 +2304,8 @@ class Plugin
 				$result = $this->rightWayAPI->createRWCard($customerId);
 				$resultArray = json_decode($result, true);
 				$resultArray['customerId'] = $customerId;
-				$result = json_encode($resultArray);
-				ob_start();
-				var_dump($result);
-				Plugin::get()->log( ob_get_clean() );
+				$result = json_encode( $resultArray );
+				Plugin::get()->log( $result );
 				wp_send_json_success($result);
 			}	catch (\Exception $e) {
 				Plugin::get()->log( $e->getMessage() );

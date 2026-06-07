@@ -106,7 +106,7 @@ class RightWay {
         // Отправляем запрос
         $response = wp_remote_get( $this->rwApiUrlCustomersSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
-        Plugin::get()->log( __( 'Поиск покупателя', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Поиск покупателя: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
         /* file_put_contents('/var/www/medknigaservis.ru/dev/wp-content/themes/medknigaservis/inc/'.self::LOGFILE, .PHP_EOL,FILE_APPEND); */
         
         if (200 == wp_remote_retrieve_response_code($response)) {
@@ -117,7 +117,7 @@ class RightWay {
         } else {
             throw new \Exception(wp_remote_retrieve_response_code($response).' '.wp_remote_retrieve_response_message($response));
         }
-        Plugin::get()->log( __( 'Ответ RW на запрос поиска клиента', RIGHTWAY ) . ': ' . $customerId );
+        Plugin::get()->log( sprintf( __('Ответ RW на запрос поиска клиента: %s', 'rightway' ), $customerId ) );
         return $customerId;
         }
 
@@ -144,7 +144,7 @@ class RightWay {
         $response = wp_remote_get( $this->rwApiUrlCustomersSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log($this->rwApiUrlCustomersSearch . '?'.$parameters);
-        Plugin::get()->log( __( 'Поиск покупателей', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Поиск покупателей: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
 
         switch ($responseCode) {
             case 200:
@@ -189,7 +189,7 @@ class RightWay {
         $response = wp_remote_get( $this->rwApiUrlCustomersSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log($this->rwApiUrlCustomersSearch . '?'.$parameters);
-        Plugin::get()->log( __( 'Поиск покупателей', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Поиск покупателей: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
 
         switch ($responseCode) {
             case 200:
@@ -297,7 +297,7 @@ class RightWay {
         } else {
             throw new \Exception(wp_remote_retrieve_response_code($response).' '.wp_remote_retrieve_response_message($response));
         }
-        Plugin::get()->log( __( 'Ответ RW на запрос поиска контакта', RIGHTWAY ) . ': ' . $contactId );
+        Plugin::get()->log( sprintf( __('Ответ RW на запрос поиска контакта: %s', 'rightway' ), $contactId ) );
         return $contactId;
     }    
 
@@ -325,7 +325,7 @@ class RightWay {
         $response = wp_remote_get( $this->rwApiUrlCardSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log($this->rwApiUrlCardSearch . '?'.$parameters);
-        /* Plugin::get()->log( __( 'Тело ответа на запрос поиска карты', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) ); */
+        /* Plugin::get()->log( sprintf( __('Тело ответа на запрос поиска карты: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) ); */
         
         if (200 == wp_remote_retrieve_response_code($response)) {
             $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);       
@@ -360,7 +360,7 @@ class RightWay {
         // Отправляем запрос
         $response = wp_remote_get( $this->rwApiUrlCardSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
-        /* Plugin::get()->log( __( 'Тело ответа на запрос поиска карты', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) ); */
+        /* Plugin::get()->log( sprintf( __('Тело ответа на запрос поиска карты: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) ); */
         
         if (200 == wp_remote_retrieve_response_code($response)) {
             $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
@@ -399,13 +399,11 @@ class RightWay {
         // Отправляем запрос
         $response = wp_remote_get( $this->rwApiUrlCardSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
-        Plugin::get()->log( __( 'Тело ответа на запрос аккаунта', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Тело ответа на запрос аккаунта: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
         
         if (200 == wp_remote_retrieve_response_code($response)) {
             $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
-            ob_start();
-            var_dump($bodyArray);
-            Plugin::get()->log( ob_get_clean() );
+            Plugin::get()->log( wp_json_encode( $bodyArray, JSON_UNESCAPED_UNICODE ) );
             //Делаем дополнительную проверку на непустой body, так как на практике встретился случай, когда для неклиента был получен код 200
             if (count($bodyArray) !=0) {
                 return $bodyArray[0]['id']; // Возвращаем идентификатор карты (что делать, если карт несколько?)
@@ -442,13 +440,11 @@ class RightWay {
         // Отправляем запрос
         $response = wp_remote_get( $this->rwApiUrlCardSearch . '?'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
-        Plugin::get()->log( __( 'Тело ответа на запрос аккаунта', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Тело ответа на запрос аккаунта: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
         
         if (200 == wp_remote_retrieve_response_code($response)) {
             $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
-            ob_start();
-            var_dump($bodyArray);
-            Plugin::get()->log( ob_get_clean() );
+            Plugin::get()->log( wp_json_encode( $bodyArray, JSON_UNESCAPED_UNICODE ) );
             //Делаем дополнительную проверку на непустой body, так как на практике встретился случай, когда для неклиента был получен код 200
             if (count($bodyArray) !=0) {
                 return $bodyArray[0]['customerId']; // Возвращаем идентификатор клиента
@@ -518,7 +514,7 @@ class RightWay {
         Plugin::get()->log( json_encode($args, JSON_UNESCAPED_UNICODE));
         switch ($responseCode) {
             case 200:
-                Plugin::get()->log( __( 'Тело ответа', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+                Plugin::get()->log( sprintf( __('Тело ответа: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
                 $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
                 return wp_remote_retrieve_body( $response );
 /*                 if (count($bodyArray) !=0) {
@@ -572,11 +568,11 @@ class RightWay {
         // Отправляем запрос
         $response = wp_remote_post( $this->rwApiUrlCard.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
-        Plugin::get()->log( __( 'Запрос на создание бонусной карты: ', RIGHTWAY ) . ': ' . $this->rwApiUrlCard.$parameters );
+        Plugin::get()->log( sprintf( __('Запрос на создание бонусной карты: %s', 'rightway' ), $this->rwApiUrlCard . $parameters ) );
         Plugin::get()->log( json_encode($args['body'], JSON_UNESCAPED_UNICODE) );
         switch ($responseCode) {
             case 200:
-                Plugin::get()->log( __( 'Тело ответа', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+                Plugin::get()->log( sprintf( __('Тело ответа: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
                 $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
                 if (count($bodyArray) !=0) {
                     return wp_remote_retrieve_body( $response );
@@ -623,7 +619,7 @@ class RightWay {
         $response = wp_remote_get( $this->rwApiUrlCard . '/'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log( 'Запрос бонусов на карте: '.$this->rwApiUrlCard . '/'.$parameters);
-        Plugin::get()->log( __( 'Тело ответа на запрос бонусов на карте', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Тело ответа на запрос бонусов на карте: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
         switch ($responseCode) {
             case 200:
                 $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
@@ -665,7 +661,7 @@ class RightWay {
         $response = wp_remote_get( $this->rwApiUrlCard . '/'.$parameters, $args );
         $responseCode = wp_remote_retrieve_response_code($response);
         Plugin::get()->log( 'Запрос summary карты: '.$this->rwApiUrlCard . '/'.$parameters);
-        Plugin::get()->log( __( 'Тело ответа на запрос summary карты', RIGHTWAY ) . ': ' . wp_remote_retrieve_body( $response ) );
+        Plugin::get()->log( sprintf( __('Тело ответа на запрос summary карты: %s', 'rightway' ), wp_remote_retrieve_body( $response ) ) );
         switch ($responseCode) {
             case 200:
                 /* $bodyArray = json_decode( wp_remote_retrieve_body( $response ),true);
@@ -795,12 +791,14 @@ class RightWay {
             )
 
         );
-        Plugin::get()->log( __( 'Запрос контактов покупателя с customerId='.$customerId, RIGHTWAY ) );
+        /* translators: %s: customer ID. */
+        Plugin::get()->log( sprintf( __( 'Запрос контактов покупателя с customerId=%s', 'rightway' ), $customerId ) );
         Plugin::get()->log($this->rwApiUrlCustomers . $parameters);
 
         // Отправляем запрос
         $response = wp_remote_get( $this->rwApiUrlCustomers . $parameters, $args );
-        Plugin::get()->log( __( 'Контакты покупателя с customerId='.$customerId, RIGHTWAY ) . ': ' . wp_remote_retrieve_body($response) );
+        /* translators: %1$s: customer ID, %2$s: response body. */
+        Plugin::get()->log( sprintf( __( 'Контакты покупателя с customerId=%1$s: %2$s', 'rightway' ), $customerId, wp_remote_retrieve_body( $response ) ) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
         switch ($responseCode) {
@@ -849,7 +847,7 @@ class RightWay {
 
         // Отправляем запрос
         $response = wp_remote_post( $this->rwApiUrlCustomers . '?'.$parameters, $args );
-        Plugin::get()->log( __( 'Ответ на обновление', RIGHTWAY ) . ': ' . wp_remote_retrieve_response_code($response) );
+        Plugin::get()->log( sprintf( __('Ответ на обновление: %s', 'rightway' ), wp_remote_retrieve_response_code( $response ) ) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
         switch ($responseCode) {
@@ -927,16 +925,16 @@ class RightWay {
      */
     private function getRwCustomerFieldLabel( $field_name ) {
         $labels = array(
-            'firstName'  => __( 'Имя', RIGHTWAY ),
-            'lastName'   => __( 'Фамилия', RIGHTWAY ),
-            'middleName' => __( 'Отчество', RIGHTWAY ),
-            'birthDate'  => __( 'Дата рождения', RIGHTWAY ),
-            'gender'     => __( 'Пол', RIGHTWAY ),
+            'firstName'  => __( 'Имя', 'rightway' ),
+            'lastName'   => __( 'Фамилия', 'rightway' ),
+            'middleName' => __( 'Отчество', 'rightway' ),
+            'birthDate'  => __( 'Дата рождения', 'rightway' ),
+            'gender'     => __( 'Пол', 'rightway' ),
         );
         if ( isset( $labels[ $field_name ] ) ) {
             return $labels[ $field_name ];
         }
-        return $field_name !== '' ? $field_name : __( 'Поле анкеты', RIGHTWAY );
+        return $field_name !== '' ? $field_name : __( 'Поле анкеты', 'rightway' );
     }
 
     /**
@@ -946,7 +944,7 @@ class RightWay {
     private function translateRwApiErrorText( $text ) {
         $text   = trim( $text );
         $known  = array(
-            'This value is not valid.' => __( 'указано недопустимое значение. Уберите спецсимволы: скобки, восклицательные знаки и т. п.', RIGHTWAY ),
+            'This value is not valid.' => __( 'указано недопустимое значение. Уберите спецсимволы: скобки, восклицательные знаки и т. п.', 'rightway' ),
         );
         if ( isset( $known[ $text ] ) ) {
             return $known[ $text ];
@@ -1031,7 +1029,7 @@ class RightWay {
 
         // Отправляем запрос
         $response = wp_remote_post( $this->rwApiUrlContacts.$parameters, $args );
-        Plugin::get()->log( __( 'Добавление контакта покупателю', RIGHTWAY ) . ': ' . wp_remote_retrieve_response_code($response) );
+        Plugin::get()->log( sprintf( __('Добавление контакта покупателю: %s', 'rightway' ), wp_remote_retrieve_response_code( $response ) ) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
         switch ($responseCode) {
@@ -1076,7 +1074,7 @@ class RightWay {
 
         // Отправляем запрос
         $response = wp_remote_post( $this->rwApiUrlContacts.$parameters, $args );
-        Plugin::get()->log( __( 'Редактирование контакта покупателя', RIGHTWAY ) . ': ' . wp_remote_retrieve_response_code($response) );
+        Plugin::get()->log( sprintf( __('Редактирование контакта покупателя: %s', 'rightway' ), wp_remote_retrieve_response_code( $response ) ) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
         switch ($responseCode) {
@@ -1121,7 +1119,7 @@ class RightWay {
 
         // Отправляем запрос
         $response = wp_remote_post( $this->rwApiUrlCardMerge, $args );
-        Plugin::get()->log( __( 'Объединение карт', RIGHTWAY ) . ': ' . wp_remote_retrieve_response_code($response) );
+        Plugin::get()->log( sprintf( __('Объединение карт: %s', 'rightway' ), wp_remote_retrieve_response_code( $response ) ) );
 
         $responseCode = wp_remote_retrieve_response_code($response);
         $responseCode = 200;
@@ -1179,10 +1177,10 @@ class RightWay {
                 if ( is_array( $decoded400 ) && ! empty( $decoded400['message'] ) ) {
                     $rwMsg = $decoded400['message'];
                     if ( stripos( $rwMsg, 'empty contact data' ) !== false && stripos( $rwMsg, 'Email' ) !== false ) {
-                        throw new \Exception( __( 'Нельзя включить рассылку по email: в программе лояльности нет email-контакта. Укажите email в анкете или отключите канал Email.', RIGHTWAY ) );
+                        throw new \Exception( __( 'Нельзя включить рассылку по email: в программе лояльности нет email-контакта. Укажите email в анкете или отключите канал Email.', 'rightway' ) );
                     }
                     if ( stripos( $rwMsg, 'empty contact data' ) !== false && stripos( $rwMsg, 'Sms' ) !== false ) {
-                        throw new \Exception( __( 'Нельзя включить SMS: в программе лояльности нет подтверждённого телефона.', RIGHTWAY ) );
+                        throw new \Exception( __( 'Нельзя включить SMS: в программе лояльности нет подтверждённого телефона.', 'rightway' ) );
                     }
                     throw new \Exception( $rwMsg );
                 }

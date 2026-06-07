@@ -30,9 +30,6 @@ Copyright 2023  Irina Fedorova  (email: skywalker2718@gmail.com)
 */
 defined( 'ABSPATH' ) or die( 'No script please!' );
 
-/* Глобальные константы плагина */
-define( 'RIGTWAY', 'rightway' );	// Text Domain
-
 require_once __DIR__ . '/classes/Plugin.php';
 require_once __DIR__ . '/classes/API.php';
 
